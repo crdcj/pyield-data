@@ -1,4 +1,4 @@
-name: Atualização BC Sec.
+name: Atualização BC Secundário
 
 on:
   schedule:
@@ -21,7 +21,7 @@ jobs:
         run: pip install -r requirements.txt
     
       - name: Run update script
-        run: python scripts/update_bc_sec.py
+        run: python update_bc_sec.py
 
       - name: Commit and push changes
         run: |

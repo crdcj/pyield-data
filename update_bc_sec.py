@@ -8,7 +8,7 @@ import datetime as dt
 import pandas as pd
 
 # Configurações e constantes
-BC_FILENAME = "bc_secundario.parquet"
+BC_FILEPATH = "bc_secundario.parquet"
 
 
 def update_dataset(base_df: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFrame:
@@ -58,7 +58,7 @@ def run():
     updated_df = update_dataset(main_df, new_df)
 
     # Save updated dataset
-    updated_df.to_parquet(BC_FILENAME, index=False, compression="zstd")
+    updated_df.to_parquet(BC_FILEPATH, index=False, compression="zstd")
 
 
 if __name__ == "__main__":
