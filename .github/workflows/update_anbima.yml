@@ -2,7 +2,7 @@ name: Atualização BC Secundário
 
 on:
   schedule:
-    - cron: "0 5 * * 2-6"
+    - cron: "0 1 * * 2-6"
   workflow_dispatch: null
 
 jobs:
@@ -21,14 +21,14 @@ jobs:
         run: pip install -r requirements.txt
     
       - name: Run update script
-        run: python update_bc_sec.py
+        run: python update_anbima.py
 
       - name: Commit and push changes
         run: |
           git config --local user.email "cr.cj@outlook.com"
           git config --local user.name "Carlos Carvalho"
-          git add bc_secundario.parquet
-          git commit -m "BC Secundário atualizado em [$(date +'%Y-%m-%d')]"
+          git add anbima_data.parquet
+          git commit -m "Dados Anbima atualizados em [$(date +'%Y-%m-%d')]"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
