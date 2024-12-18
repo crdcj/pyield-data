@@ -20,7 +20,7 @@ def get_di_on_date(date: dt.date) -> pd.DataFrame:
 now_bz = dt.datetime.now(TIMEZONE_BZ)
 today_bz = now_bz.date()
 # Force a specific date for testing purposes
-today_bz = pd.to_datetime("17-12-2024", dayfirst=True)
+# today_bz = pd.to_datetime("17-12-2024", dayfirst=True)
 
 if not yd.bday.is_business_day(today_bz):
     raise ValueError("Today is not a business day.")
