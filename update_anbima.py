@@ -14,16 +14,17 @@ def get_anbima_on_date(date: dt.date) -> pd.DataFrame:
     return yd.anbima.data(reference_date=date)[keep_cols].copy()
 
 
-now_bz = dt.datetime.now(TIMEZONE_BZ)
-today_bz = now_bz.date()
+today_bz = dt.datetime.now(TIMEZONE_BZ).date()
+yesterday_bz = today_bz - dt.timedelta(days=1)
+
 # Force a specific date for testing purposes
 # today_bz = pd.to_datetime("28-11-2024", dayfirst=True)
 
-if not yd.bday.is_business_day(today_bz):
+if not yd.bday.is_business_day(yesterday_bz):
     raise ValueError("Today is not a business day.")
 
 (  # Load the ANBIMA data from the parquet file and update it with the new data
-    pd.concat([pd.read_parquet(ANBIMA_FILE), get_anbima_on_date(today_bz)])
+    pd.concat([pd.read_parquet(ANBIMA_FILE), get_anbima_on_date(yesterday_bz)])
     .drop_duplicates(subset=["ReferenceDate", "BondType", "MaturityDate"], keep="last")
     .sort_values(["ReferenceDate", "BondType", "MaturityDate"])
     .reset_index(drop=True)

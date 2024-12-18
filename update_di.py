@@ -17,17 +17,17 @@ def get_di_on_date(date: dt.date) -> pd.DataFrame:
     return df
 
 
-now_bz = dt.datetime.now(TIMEZONE_BZ)
-today_bz = now_bz.date()
+today_bz = dt.datetime.now(TIMEZONE_BZ).date()
+yesterday_bz = today_bz - dt.timedelta(days=1)
 # Force a specific date for testing purposes
 # today_bz = pd.to_datetime("17-12-2024", dayfirst=True)
 
-if not yd.bday.is_business_day(today_bz):
+if not yd.bday.is_business_day(yesterday_bz):
     raise ValueError("Today is not a business day.")
 
 
 (  # Load the DI data from the parquet file and update it with the new data
-    pd.concat([pd.read_parquet(DI_FILE), get_di_on_date(today_bz)])
+    pd.concat([pd.read_parquet(DI_FILE), get_di_on_date(yesterday_bz)])
     .drop_duplicates(subset=["TradeDate", "TickerSymbol"], keep="last")
     .sort_values(["TradeDate", "ExpirationDate"])
     .reset_index(drop=True)
