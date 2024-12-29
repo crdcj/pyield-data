@@ -32,14 +32,14 @@ def main():
     bz_today = dt.datetime.now(BZ_TIMEZONE).date()
     target_date = bz_today - dt.timedelta(days=1)  # Yesterday
     if not yd.bday.is_business_day(target_date):
-        logging.warning("Target date is not a business day. Aborting update process.")
+        logging.warning("Target date is not a business day. Aborting...")
         return
 
     pre_xmas = dt.date(target_date.year, 12, 24)
     pre_ny = dt.date(target_date.year, 12, 31)
     if target_date == pre_xmas or target_date == pre_ny:
         logging.warning(
-            "There is no session on the day before Christmas or New Year's Eve. Aborting update process."
+            "There is no session on the day before Christmas or New Year's Eve. Aborting..."
         )
         return
 
