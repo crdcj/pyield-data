@@ -26,9 +26,12 @@ jobs:
       - name: Commit and push changes
         run: |
           git config --local user.email "cr.cj@outlook.com"
-          git config --local user.name "Carlos Carvalho"
-          git add di_data.parquet
-          git commit -m "Dados do DI atualizados em [$(date +'%Y-%m-%d')]"
-          git push
+          git config --local user.name "Carlos Carvalho"          
+          if [[ $(git status --porcelain) ]]; then
+            git add *.parquet
+            git commit -m "Dados atualizados em [$(date +'%d-%m-%Y')]"
+            git push
+          else
+            echo "No changes to commit. Exiting gracefully."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
