@@ -1,4 +1,4 @@
-name: Atualização DI
+name: Atualização DI e Anbima
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch: null
 
 jobs:
-  update-database:
+  update-datasets:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
