@@ -27,7 +27,8 @@ jobs:
         run: |
           git config --local user.email "cr.cj@outlook.com"
           git config --local user.name "Carlos Carvalho"          
-          if [[ $(git status --porcelain) ]]; then
+          if [[ $(git status --porcelain) ]]
+          then
             git add *.parquet
             git commit -m "Dados atualizados em [$(date +'%d-%m-%Y')]"
             git push
