@@ -33,5 +33,6 @@ jobs:
             git push
           else
             echo "No changes to commit. Exiting gracefully."
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
