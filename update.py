@@ -10,7 +10,7 @@ BZ_TIMEZONE = ZoneInfo("America/Sao_Paulo")
 TPF_PARQUET = "anbima_data.parquet"
 TPF_PICKLE = "data/anbima_tpf.pkl.gz"
 DI_PARQUET = "di_data.parquet"
-DI_PICKLE = "data/di.pkl.gz"
+DI_PICKLE = "data/b3_di.pkl.gz"
 
 logger = logging.getLogger(__name__)
 
