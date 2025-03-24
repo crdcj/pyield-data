@@ -118,8 +118,8 @@ def main():
         )
         return
 
-    # update_di_parquet(target_date)
-    # update_tpf_parquet(target_date)
+    update_di_parquet(target_date)
+    update_tpf_parquet(target_date)
 
     update_di_pickle(target_date)
     update_tpf_pickle(target_date)
