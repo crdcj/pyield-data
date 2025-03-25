@@ -17,8 +17,8 @@ TPF_PARQUET = "anbima_data.parquet"
 base_dir = Path(__file__).parent
 data_dir = base_dir / "data"
 
-DI_PICKLE = base_dir / "b3_di.pkl.gz"
-TPF_PICKLE = base_dir / "anbima_tpf.pkl.gz"
+DI_PICKLE = data_dir / "b3_di.pkl.gz"
+TPF_PICKLE = data_dir / "anbima_tpf.pkl.gz"
 
 logger = logging.getLogger(__name__)
 
