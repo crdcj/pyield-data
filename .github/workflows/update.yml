@@ -29,7 +29,8 @@ jobs:
           git config --local user.name "Carlos Carvalho"          
           if [[ $(git status --porcelain) ]]
           then
-            git add *.parquet
+            git add *.parquet  # Add all parquet files
+            git add data/  # Add all files created in the data folder
             git commit -m "Dados atualizados em [$(date +'%d-%m-%Y')]"
             git push
           else
