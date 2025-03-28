@@ -2,7 +2,8 @@ name: Atualização DI e Anbima
 
 on:
   schedule:
-    - cron: "0 6 * * 2-6"
+    - cron: "30 00 * * 2-6"
+    - cron: "30 10 * * 2-6"
   workflow_dispatch: null
 
 jobs:
