@@ -9,16 +9,13 @@ import pyield as yd
 # Configurações e constantes
 BZ_TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
-# Os arquivos parquet estão na raiz do repositório
-DI_PARQUET = "di_data.parquet"
-TP_PARQUET = "anbima_data.parquet"
-
-# Os arquivos pickle estão na pasta data
+# Os arquivos estão na pasta data
 base_dir = Path(__file__).parent
 data_dir = base_dir / "data"
 
-DI_PICKLE = data_dir / "b3_di.pkl.gz"
-TP_PICKLE = data_dir / "anbima_tpf.pkl.gz"
+DI_PARQUET = data_dir / "b3_di.parquet"
+TPF_PARQUET = data_dir / "anbima_tpf.parquet"
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,23 +38,6 @@ def get_tpf_on_date(date: dt.date) -> pd.DataFrame:
     return yd.anbima.tpf_web_data(date=date)[keep_cols].copy()
 
 
-def update_di_pickle(target_date: dt.date) -> None:
-    try:
-        df_old = pd.read_pickle(DI_PICKLE)
-        df_new = get_di_on_date(target_date)
-        (
-            pd.concat([df_old, df_new])
-            .drop_duplicates(subset=["TradeDate", "TickerSymbol"], keep="last")
-            .sort_values(["TradeDate", "ExpirationDate"])
-            .reset_index(drop=True)
-            .to_pickle(DI_PICKLE, compression="gzip")
-        )
-
-        logger.info(f"DI pickle updated with data from {target_date}")
-    except Exception as e:
-        logger.error(f"Failed to update DI pickle: {e}")
-
-
 def update_di_parquet(target_date: dt.date) -> None:
     try:
         df_old = pd.read_parquet(DI_PARQUET)
@@ -75,27 +55,9 @@ def update_di_parquet(target_date: dt.date) -> None:
         logger.error(f"Failed to update DI dataset: {e}")
 
 
-def update_tp_pickle(target_date: dt.date) -> None:
-    try:
-        df_old = pd.read_pickle(TP_PICKLE)
-        df_new = get_tpf_on_date(target_date)
-        key_cols = ["ReferenceDate", "BondType", "MaturityDate"]
-        (
-            pd.concat([df_old, df_new])
-            .drop_duplicates(subset=key_cols, keep="last")
-            .sort_values(key_cols)
-            .reset_index(drop=True)
-            .to_pickle(TP_PICKLE, compression="gzip")
-        )
-
-        logger.info(f"TPF pickle updated with data from {target_date}")
-    except Exception as e:
-        logger.error(f"Failed to update TPF dataset: {e}")
-
-
 def update_tp_parquet(target_date: dt.date) -> None:
     try:
-        df_old = pd.read_parquet(TP_PARQUET)
+        df_old = pd.read_parquet(TPF_PARQUET)
         df_new = get_tpf_on_date(target_date)
         key_cols = ["ReferenceDate", "BondType", "MaturityDate"]
         (
@@ -103,7 +65,7 @@ def update_tp_parquet(target_date: dt.date) -> None:
             .drop_duplicates(subset=key_cols, keep="last")
             .sort_values(key_cols)
             .reset_index(drop=True)
-            .to_parquet(TP_PARQUET, compression="gzip", index=False)
+            .to_parquet(TPF_PARQUET, compression="gzip", index=False)
         )
 
         logger.info(f"TPF parquet updated with data from {target_date}")
@@ -112,8 +74,15 @@ def update_tp_parquet(target_date: dt.date) -> None:
 
 
 def main():
+    today = dt.datetime.now().date()
     bz_today = dt.datetime.now(BZ_TIMEZONE).date()
-    target_date = bz_today - dt.timedelta(days=1)  # Yesterday
+    if bz_today == today:
+        # Voltar um dia se as datas forem iguais
+        target_date = bz_today - dt.timedelta(days=1)  # Yesterday
+    else:
+        # Se as datas forem diferentes, Brasil está um dia atrás
+        # Logo já é a data correta
+        target_date = bz_today
 
     # Force a specific date for testing purposes
     # target_date = pd.to_datetime("21-03-2025", dayfirst=True).date()
@@ -132,9 +101,6 @@ def main():
 
     update_di_parquet(target_date)
     update_tp_parquet(target_date)
-
-    update_di_pickle(target_date)
-    update_tp_pickle(target_date)
 
 
 if __name__ == "__main__":
