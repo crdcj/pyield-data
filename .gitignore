@@ -1,0 +1,17 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# ignore __pycache__ folders
+__pycache__/
+
+# ignore dev folder
+dev/
+
+.vscode/
+
+# JupyterNotebook exploratory data analysis
+notebook.py
