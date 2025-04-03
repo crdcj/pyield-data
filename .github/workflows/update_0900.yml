@@ -1,0 +1,40 @@
+name: Atualização Projeção Inflação
+
+on:
+  schedule:
+    - cron: "00 09 * * 1-5" # Executa às 09:00 de segunda a sexta
+  workflow_dispatch: null
+
+jobs:
+  update-datasets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.13"
+    
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+    
+      - name: Run update script
+        run: python update_0900.py
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "cr.cj@outlook.com"
+          git config --local user.name "Carlos Carvalho"          
+          if [[ $(git status --porcelain) ]]
+          then
+            git add *.parquet  # Add all parquet files
+            git add data/  # Add all files created in the data folder
+            git commit -m "Dados atualizados em [$(date +'%d-%m-%Y')]"
+            git push
+          else
+            echo "No changes to commit. Exiting gracefully."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
