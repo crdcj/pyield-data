@@ -19,6 +19,13 @@ jobs:
     
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Install required locales
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y locales
+          sudo locale-gen pt_BR.UTF-8
+          sudo update-locale
     
       - name: Run update script
         run: python update_0900.py
