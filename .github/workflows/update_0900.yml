@@ -2,7 +2,7 @@ name: Atualização Projeção Inflação
 
 on:
   schedule:
-    - cron: "00 09 * * 1-5" # Executa às 09:00 de segunda a sexta
+    - cron: "00 12 * * 1-5" # Executa às 09:00 de segunda a sexta
   workflow_dispatch: null
 
 jobs:
