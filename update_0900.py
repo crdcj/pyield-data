@@ -79,13 +79,14 @@ def get_ipca_calendar() -> pd.DataFrame:
         logger.error(f"Error fetching IPCA calendar: {e}")
         raise
 
+
 def get_ipca_data(months_back: int = 4) -> Optional[float]:
     """
     Get IPCA data for the specified period.
-    
+
     Args:
         months_back: Number of months to look back
-        
+
     Returns:
         float: IPCA value as percentage or None if error occurs
     """
@@ -93,47 +94,49 @@ def get_ipca_data(months_back: int = 4) -> Optional[float]:
         today = pd.Timestamp.today().date()
         end_date = today.strftime("%d-%m-%Y")
         start_date = (today - pd.DateOffset(months=months_back)).strftime("%d-%m-%Y")
-        
+
         df_ipca = yd.ibge.ipca_indexes(start_date, end_date)
-        
+
         if len(df_ipca) < 2:
             logger.warning("Not enough IPCA data points available")
             return None
-            
+
         ipca_value = (df_ipca["Value"].iloc[-1] / df_ipca["Value"].iloc[-2]) - 1
         ipca_value = float(ipca_value) * 100
         return ipca_value
-        
+
     except Exception as e:
         logger.error(f"Error fetching IPCA data: {e}")
         return None
 
+
 def get_current_month_release_date(df_calendario: pd.DataFrame) -> Optional[dt.date]:
     """
     Find the current month's IPCA release date.
-    
+
     Args:
         df_calendario: DataFrame with IPCA calendar data
-        
+
     Returns:
         dt.date: Current month's release date or None if not found
     """
     today = pd.Timestamp.today().date()
     current_month = today.month
     current_year = today.year
-    
+
     # Find the most recent IPCA release date
     ipca_release_dates = pd.to_datetime(df_calendario["data_divulgacao"])
     current_month_release = ipca_release_dates[
         (ipca_release_dates.dt.month == current_month)
         & (ipca_release_dates.dt.year == current_year)
     ]
-    
+
     if len(current_month_release) == 0:
         logger.warning(f"No IPCA release date found for {current_month}/{current_year}")
         return None
-        
+
     return current_month_release.iloc[0].date()
+
 
 def update_inflation_dataframe(
     df_inflation_proj: pd.DataFrame,
@@ -141,11 +144,11 @@ def update_inflation_dataframe(
 ) -> pd.DataFrame:
     """
     Update inflation dataframe with latest projections.
-    
+
     Args:
         df_inflation_proj: Existing inflation projection dataframe
         df_calendario: IPCA calendar dataframe
-        
+
     Returns:
         pd.DataFrame: Updated inflation projection dataframe
     """
@@ -192,9 +195,13 @@ def update_inflation_dataframe(
     for date in business_days:
         # Default to None if we couldn't get values
         inflation_value = None
-        
+
         # Determine which inflation value to use based on the rules
-        if current_month_release_date is not None and ipca_value is not None and anbima_value is not None:
+        if (
+            current_month_release_date is not None
+            and ipca_value is not None
+            and anbima_value is not None
+        ):
             if date.day < 15:  # Before the 15th of the month
                 if date.date() >= current_month_release_date:
                     # After IPCA release, use IPCA value
@@ -211,7 +218,7 @@ def update_inflation_dataframe(
         elif ipca_value is not None:
             # Fallback to IPCA if ANBIMA is not available
             inflation_value = ipca_value
-        
+
         new_rows.append({"reference_date": date, "inflation": inflation_value})
 
     # Create a dataframe from the new rows
@@ -236,6 +243,7 @@ def update_inflation_dataframe(
     logger.info(f"Added {len(new_data)} new data points")
     return updated_df
 
+
 def is_business_day(date: dt.date) -> bool:
     """Check if the given date is a business day."""
     return yd.bday.offset(date, 0).date() == date
@@ -249,13 +257,13 @@ def is_pre_holiday(date: dt.date) -> bool:
 
 
 def main():
-today = pd.Timestamp.today().date()
+    today = pd.Timestamp.today().date()
 
     # Check if today is a business day
     if not is_business_day(today):
         logger.warning("Today is not a business day.")
         return
-    
+
     # Check if today is a pre-holiday
     if is_pre_holiday(today):
         logger.warning(
@@ -266,14 +274,16 @@ today = pd.Timestamp.today().date()
     try:
         # Get IPCA calendar
         df_calendar = get_ipca_calendar()
-        
+
         # Load existing inflation data
         try:
             df_inflation_proj = pd.read_parquet(IPCA_PARQUET)
             logger.info(f"Loaded existing data with {len(df_inflation_proj)} entries")
 
             # Update inflation dataframe
-            df_inflation_updated = update_inflation_dataframe(df_inflation_proj, df_calendar)
+            df_inflation_updated = update_inflation_dataframe(
+                df_inflation_proj, df_calendar
+            )
 
             # Save the updated dataframe to parquet
             df_inflation_updated.to_parquet(
@@ -285,9 +295,7 @@ today = pd.Timestamp.today().date()
 
         except (FileNotFoundError, pd.errors.EmptyDataError):
             logger.info("No existing data found")
-        
-        
-        
+
     except Exception as e:
         logger.error(f"Error in main process: {e}", exc_info=True)
 
