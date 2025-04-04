@@ -23,9 +23,9 @@ try:
 except NameError:
     # Fall back to current working directory (for interactive sessions)
     base_dir = Path.cwd()
-base_dir = Path(__file__).parent
 data_dir = base_dir / "data"
-IPCA_PARQUET = data_dir / "inflacao_precificacao.parquet"
+VNA_BASE_CSV = data_dir / "vna_base.csv"
+VNA_PARQUET = data_dir / "vna_ntnb.parquet"
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -138,35 +138,57 @@ def get_current_month_release_date(df_calendario: pd.DataFrame) -> Optional[dt.d
     return current_month_release.iloc[0].date()
 
 
-def update_inflation_dataframe(
-    df_inflation_proj: pd.DataFrame,
+def get_previous_15th(date):
+    """
+    Given a date, returns the previous 15th day of a month.
+    If the date is the 15th, returns the 15th of the previous month.
+    """
+    # date = pd.to_datetime(date)  # Ensure date is in datetime format
+
+    # If the date is on or after the 15th of the current month
+    if date.day >= 15:
+        # Return the 15th of the current month
+        return dt.datetime(date.year, date.month, 15)
+    else:
+        # We need the 15th of the previous month
+        # If current month is January, go to December of previous year
+        if date.month == 1:
+            return dt.datetime(date.year - 1, 12, 15)
+        else:
+            return dt.datetime(date.year, date.month - 1, 15)
+
+
+def update_vna_dataframe(
+    df_vna_base: pd.DataFrame,
+    df_vna: pd.DataFrame,
     df_calendario: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Update inflation dataframe with latest projections.
+    Update vna dataframe.
 
     Args:
-        df_inflation_proj: Existing inflation projection dataframe
+        df_vna: Existing vna dataframe
         df_calendario: IPCA calendar dataframe
 
     Returns:
-        pd.DataFrame: Updated inflation projection dataframe
+        pd.DataFrame: Updated vna dataframe
     """
     today = pd.Timestamp.today().date()
 
     # Get the last date in the dataframe
-    last_date_in_df = pd.Timestamp(df_inflation_proj["reference_date"].max()).date()
+    last_date_in_df = pd.Timestamp(df_vna["reference_date"].max()).date()
 
     # Ensure last_date_in_df is before today
     if last_date_in_df >= today:
         logger.info(f"Data already up to date until {last_date_in_df}")
-        return df_inflation_proj
+        return df_vna
 
     business_days = yd.bday.generate(last_date_in_df, today, inclusive="right")
+    business_days = [date.date() for date in business_days]
 
     if len(business_days) == 0:
         logger.info("No new business days to add")
-        return df_inflation_proj
+        return df_vna
 
     # Get the current month's IPCA release date
     current_month_release_date = get_current_month_release_date(df_calendario)
@@ -174,15 +196,7 @@ def update_inflation_dataframe(
     # Get the ANBIMA projection
     anbima_value = yd.anbima.ipca_projection().projected_value
     anbima_value = float(Decimal(f"{anbima_value}") * Decimal("100.00"))
-
-    # Get the ANBIMA projection
-    try:
-        anbima_projection = yd.anbima.ipca_projection().projected_value
-        anbima_value = float(Decimal(f"{anbima_projection}") * Decimal("100.00"))
-        logger.info(f"ANBIMA projection: {anbima_value:.2f}%")
-    except Exception as e:
-        logger.error(f"Error fetching ANBIMA projection: {e}")
-        anbima_value = None
+    logger.info(f"ANBIMA projection: {anbima_value:.2f}%")
 
     # Get IPCA data
     ipca_value = get_ipca_data()
@@ -203,7 +217,7 @@ def update_inflation_dataframe(
             and anbima_value is not None
         ):
             if date.day < 15:  # Before the 15th of the month
-                if date.date() >= current_month_release_date:
+                if date >= current_month_release_date:
                     # After IPCA release, use IPCA value
                     inflation_value = ipca_value
                 else:
@@ -219,17 +233,43 @@ def update_inflation_dataframe(
             # Fallback to IPCA if ANBIMA is not available
             inflation_value = ipca_value
 
-        new_rows.append({"reference_date": date, "inflation": inflation_value})
+        # Update vna. First get the last vna in the last 15th
+        vna_base_date = get_previous_15th(date).date()
+        vna_base = df_vna_base.query(f'reference_date == "{vna_base_date}"')[
+            "vna"
+        ].values[0]
+
+        next_vna_base_date = vna_base_date + pd.DateOffset(months=1)
+        next_vna_base_date = next_vna_base_date.replace(day=15).date()
+
+        du_rf = yd.bday.count(vna_base_date, date)
+        du_m = yd.bday.count(vna_base_date, next_vna_base_date)
+
+        vna_du = vna_base * (1 + inflation_value / 100) ** (du_rf / du_m)
+        vna_du = int(vna_du * 1000000) / 1000000
+
+        dc_rf = (date - vna_base_date).days
+        dc_m = (next_vna_base_date - vna_base_date).days
+
+        vna_dc = vna_base * (1 + inflation_value / 100) ** (dc_rf / dc_m)
+        vna_dc = int(vna_dc * 1000000) / 1000000
+
+        new_rows.append({
+            "reference_date": date,
+            "inflation": inflation_value,
+            "vna_du": vna_du,
+            "vna_dc": vna_dc,
+        })
 
     # Create a dataframe from the new rows
     new_data = pd.DataFrame(new_rows)
 
     if new_data.empty:
         logger.info("No new data to add")
-        return df_inflation_proj
+        return df_vna
 
     # Concatenate with the original dataframe
-    updated_df = pd.concat([df_inflation_proj, new_data], ignore_index=True)
+    updated_df = pd.concat([df_vna, new_data], ignore_index=True)
 
     # Remove any duplicates based on reference_date
     updated_df = updated_df.drop_duplicates(subset=["reference_date"], keep="last")
@@ -275,23 +315,25 @@ def main():
         # Get IPCA calendar
         df_calendar = get_ipca_calendar()
 
-        # Load existing inflation data
+        # Load existing vna data
         try:
-            df_inflation_proj = pd.read_parquet(IPCA_PARQUET)
-            logger.info(f"Loaded existing data with {len(df_inflation_proj)} entries")
+            df_vna_base = pd.read_csv(VNA_BASE_CSV)
+            df_vna = pd.read_parquet(VNA_PARQUET)
+            df_vna_base["reference_date"] = pd.to_datetime(
+                df_vna_base["reference_date"]
+            )
+            logger.info(f"Loaded existing data with {len(df_vna)} entries")
 
             # Update inflation dataframe
-            df_inflation_updated = update_inflation_dataframe(
-                df_inflation_proj, df_calendar
-            )
+            df_vna_updated = update_vna_dataframe(df_vna_base, df_vna, df_calendar)
 
             # Save the updated dataframe to parquet
-            df_inflation_updated.to_parquet(
-                IPCA_PARQUET,
+            df_vna_updated.to_parquet(
+                VNA_PARQUET,
                 compression="gzip",
                 index=False,
             )
-            logger.info(f"Updated data saved with {len(df_inflation_updated)} entries")
+            logger.info(f"Updated data saved with {len(df_vna_updated)} entries")
 
         except (FileNotFoundError, pd.errors.EmptyDataError):
             logger.info("No existing data found")
