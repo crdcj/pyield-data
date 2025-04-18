@@ -38,7 +38,7 @@ def get_tpf_on_date(date: dt.date) -> pd.DataFrame:
     return yd.anbima.tpf_web_data(date=date)[keep_cols].copy()
 
 
-def update_di_parquet(target_date: dt.date) -> None:
+def update_di_dataset(target_date: dt.date) -> None:
     try:
         df_old = pd.read_parquet(DI_PARQUET)
         df_new = get_di_on_date(target_date)
@@ -55,7 +55,7 @@ def update_di_parquet(target_date: dt.date) -> None:
         logger.error(f"Failed to update DI dataset: {e}")
 
 
-def update_tp_parquet(target_date: dt.date) -> None:
+def update_tpf_dataset(target_date: dt.date) -> None:
     try:
         df_old = pd.read_parquet(TPF_PARQUET)
         df_new = get_tpf_on_date(target_date)
@@ -85,7 +85,7 @@ def main():
         target_date = bz_today
 
     # Force a specific date for testing purposes
-    # target_date = pd.to_datetime("21-03-2025", dayfirst=True).date()
+    # target_date = pd.to_datetime("17-04-2025", dayfirst=True).date()
 
     if not yd.bday.is_business_day(target_date):
         logger.warning("Target date is not a business day. Aborting...")
@@ -99,8 +99,8 @@ def main():
         )
         return
 
-    update_di_parquet(target_date)
-    update_tp_parquet(target_date)
+    update_di_dataset(target_date)
+    update_tpf_dataset(target_date)
 
 
 if __name__ == "__main__":
