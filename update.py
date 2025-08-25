@@ -35,12 +35,12 @@ def get_di_on_date(date: dt.date) -> pd.DataFrame:
 
 def get_tpf_on_date(date: dt.date) -> pd.DataFrame:
     keep_cols = ["BondType", "ReferenceDate", "MaturityDate", "IndicativeRate", "Price"]
-    return yd.anbima.tpf_web_data(date=date)[keep_cols].copy()
+    return yd.anbima.fetch_tpf_data(date=date)[keep_cols].copy()
 
 
 def update_di_dataset(target_date: dt.date) -> None:
     try:
-        df_old = pd.read_parquet(DI_PARQUET)
+        df_old = pd.read_parquet(DI_PARQUET, dtype_backend="pyarrow")
         df_new = get_di_on_date(target_date)
         (
             pd.concat([df_old, df_new])
