@@ -40,7 +40,7 @@ def get_tpf_on_date(date: dt.date) -> pd.DataFrame:
 
 def update_di_dataset(target_date: dt.date) -> None:
     try:
-        df_old = pd.read_parquet(DI_PARQUET, dtype_backend="pyarrow")
+        df_old = pd.read_parquet(DI_PARQUET)
         df_new = get_di_on_date(target_date)
         (
             pd.concat([df_old, df_new])
