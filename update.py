@@ -35,7 +35,7 @@ def get_di_on_date(date: dt.date) -> pd.DataFrame:
 
 def get_tpf_on_date(date: dt.date) -> pd.DataFrame:
     keep_cols = ["BondType", "ReferenceDate", "MaturityDate", "IndicativeRate", "Price"]
-    return yd.anbima.fetch_tpf_data(date=date)[keep_cols].copy()
+    return yd.anbima.tpf_data(date=date, fetch_from_source=True)[keep_cols].copy()
 
 
 def update_di_dataset(target_date: dt.date) -> None:
