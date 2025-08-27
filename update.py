@@ -34,7 +34,27 @@ def get_di_on_date(date: dt.date) -> pd.DataFrame:
 
 
 def get_tpf_on_date(date: dt.date) -> pd.DataFrame:
-    return
+    df = yd.anbima.tpf_data(date=date, fetch_from_source=True)
+    selected_cols = [
+        "BondType",
+        "ReferenceDate",
+        "SelicCode",
+        "IssueBaseDate",
+        "MaturityDate",
+        "BDToMat",
+        "Duration",
+        "DV01",
+        "DV01USD",
+        "Price",
+        "BidRate",
+        "AskRate",
+        "IndicativeRate",
+        "DIRate",
+    ]
+    selected_cols = [col for col in selected_cols if col in df.columns]
+    df = df[selected_cols].copy()
+
+    return df
 
 
 def update_di_dataset(target_date: dt.date) -> None:
@@ -57,7 +77,8 @@ def update_di_dataset(target_date: dt.date) -> None:
 def update_tpf_dataset(target_date: dt.date) -> None:
     try:
         df = pd.read_parquet(TPF_PARQUET)
-        df_new = yd.anbima.tpf_data(date=target_date, fetch_from_source=True)
+        df_new = get_tpf_on_date(target_date)
+
         key_cols = ["ReferenceDate", "BondType", "MaturityDate"]
         (
             pd.concat([df, df_new])
