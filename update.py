@@ -34,16 +34,15 @@ def get_di_on_date(date: dt.date) -> pd.DataFrame:
 
 
 def get_tpf_on_date(date: dt.date) -> pd.DataFrame:
-    keep_cols = ["BondType", "ReferenceDate", "MaturityDate", "IndicativeRate", "Price"]
-    return yd.anbima.tpf_data(date=date, fetch_from_source=True)[keep_cols].copy()
+    return
 
 
 def update_di_dataset(target_date: dt.date) -> None:
     try:
-        df_old = pd.read_parquet(DI_PARQUET)
+        df = pd.read_parquet(DI_PARQUET)
         df_new = get_di_on_date(target_date)
         (
-            pd.concat([df_old, df_new])
+            pd.concat([df, df_new])
             .drop_duplicates(subset=["TradeDate", "TickerSymbol"], keep="last")
             .sort_values(["TradeDate", "ExpirationDate"])
             .reset_index(drop=True)
@@ -57,11 +56,11 @@ def update_di_dataset(target_date: dt.date) -> None:
 
 def update_tpf_dataset(target_date: dt.date) -> None:
     try:
-        df_old = pd.read_parquet(TPF_PARQUET)
-        df_new = get_tpf_on_date(target_date)
+        df = pd.read_parquet(TPF_PARQUET)
+        df_new = yd.anbima.tpf_data(date=target_date, fetch_from_source=True)
         key_cols = ["ReferenceDate", "BondType", "MaturityDate"]
         (
-            pd.concat([df_old, df_new])
+            pd.concat([df, df_new])
             .drop_duplicates(subset=key_cols, keep="last")
             .sort_values(key_cols)
             .reset_index(drop=True)
@@ -85,7 +84,7 @@ def main():
         target_date = bz_today
 
     # Force a specific date for testing purposes
-    # target_date = pd.to_datetime("14-04-2025", dayfirst=True).date()
+    # target_date = pd.to_datetime("26-08-2025", dayfirst=True).date()
 
     if not yd.bday.is_business_day(target_date):
         logger.warning("Target date is not a business day. Aborting...")
