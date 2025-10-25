@@ -2,15 +2,15 @@ name: Atualização DI e Anbima
 
 on:
   schedule:
-    - cron: "30 00 * * 2-6" # Executa às 00:30 de terça a sábado
-    - cron: "30 10 * * 2-6" # Executa às 10:30 de terça a sábado (backup)
+    - cron: "30 00 * * 2-6"
+    - cron: "30 10 * * 2-6"
   workflow_dispatch:
 
 jobs:
   update-datasets:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Necessário para criar releases
+      contents: write
     
     steps:
       - name: Check out repository
@@ -52,29 +52,21 @@ jobs:
 
       - name: Create Release with datasets
         if: steps.check_changes.outputs.has_changes == 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: data-${{ steps.check_changes.outputs.date_tag }}
-          name: Dados ${{ steps.check_changes.outputs.date_br }}
-          body: |
-            ## 📊 Atualização Diária de Dados
-            
-            **Data de referência:** ${{ steps.check_changes.outputs.date_br }}
-            
-            ### Arquivos disponíveis:
-            - `b3_di.parquet` - Contratos futuros DI1 da B3
-            - `anbima_tpf.parquet` - Títulos Públicos Federais (Anbima)
-            
-            ### Como usar:
-            ```python
-            # URL sempre aponta para a versão mais recente
-            url = "https://github.com/crdcj/pyield-data/releases/latest/download/b3_di.parquet"
-            df = pl.read_parquet(url)
-            ```
-          files: |
-            data/b3_di.parquet
-            data/anbima_tpf.parquet
-          draft: false
-          prerelease: false
+        run: |
+          TAG="data-${{ steps.check_changes.outputs.date_tag }}"
+          gh release create "$TAG" \
+            data/b3_di.parquet \
+            data/anbima_tpf.parquet \
+            --title "Dados ${{ steps.check_changes.outputs.date_br }}" \
+            --notes "Atualização diária - Dados de ${{ steps.check_changes.outputs.date_br }}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old releases
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[] | .tagName' | \
+          tail -n +31 | \
+          xargs -I {} gh release delete {} --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
