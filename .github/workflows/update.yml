@@ -28,10 +28,11 @@ jobs:
         run: python update.py
 
       - name: Set date variables
-        id: dates
         run: |
-          echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+          echo "DATE_TAG=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+          echo "DATE_BR=$(date +'%d-%m-%Y')" >> $GITHUB_ENV
+          echo "Debug - DATE_TAG: $(date +'%Y-%m-%d')"
+          echo "Debug - DATE_BR: $(date +'%d-%m-%Y')"
 
       - name: Check for changes
         id: check_changes
@@ -49,7 +50,7 @@ jobs:
           git config --local user.email "cr.cj@outlook.com"
           git config --local user.name "Carlos Carvalho"          
           git add data/*.parquet
-          git commit -m "Dados atualizados em [${{ steps.dates.outputs.date_br }}]"
+          git commit -m "Dados atualizados em [${{ env.DATE_BR }}]"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
