@@ -4,11 +4,14 @@ on:
   schedule:
     - cron: "30 00 * * 2-6" # Executa às 00:30 de terça a sábado
     - cron: "30 10 * * 2-6" # Executa às 10:30 de terça a sábado (backup)
-  workflow_dispatch: null
+  workflow_dispatch:
 
 jobs:
   update-datasets:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Necessário para criar releases
+    
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
@@ -24,18 +27,54 @@ jobs:
       - name: Run update script
         run: python update.py
 
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [[ $(git status --porcelain) ]]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+            echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes detected"
+          fi
+
       - name: Commit and push changes
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git config --local user.email "cr.cj@outlook.com"
           git config --local user.name "Carlos Carvalho"          
-          if [[ $(git status --porcelain) ]]
-          then
-            git add *.parquet  # Add all parquet files
-            git add data/  # Add all files created in the data folder
-            git commit -m "Dados atualizados em [$(date +'%d-%m-%Y')]"
-            git push
-          else
-            echo "No changes to commit. Exiting gracefully."
-          fi
+          git add data/*.parquet
+          git commit -m "Dados atualizados em [${{ steps.check_changes.outputs.date_br }}]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release with datasets
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: data-${{ steps.check_changes.outputs.date_tag }}
+          name: Dados ${{ steps.check_changes.outputs.date_br }}
+          body: |
+            ## 📊 Atualização Diária de Dados
+            
+            **Data de referência:** ${{ steps.check_changes.outputs.date_br }}
+            
+            ### Arquivos disponíveis:
+            - `b3_di.parquet` - Contratos futuros DI1 da B3
+            - `anbima_tpf.parquet` - Títulos Públicos Federais (Anbima)
+            
+            ### Como usar:
+            ```python
+            # URL sempre aponta para a versão mais recente
+            url = "https://github.com/crdcj/pyield-data/releases/latest/download/b3_di.parquet"
+            df = pl.read_parquet(url)
+            ```
+          files: |
+            data/b3_di.parquet
+            data/anbima_tpf.parquet
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
