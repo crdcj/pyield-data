@@ -101,7 +101,7 @@ def main():
         target_date = bz_today
 
     # Force a specific date for testing purposes
-    # target_date = pd.to_datetime("26-08-2025", dayfirst=True).date()
+    target_date = dt.datetime.strptime("24-10-2025", "%d-%m-%Y").date()
 
     if not yd.bday.is_business_day(target_date):
         logger.warning("Target date is not a business day. Aborting...")
