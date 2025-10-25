@@ -27,18 +27,13 @@ jobs:
       - name: Run update script
         run: python update.py
 
-      - name: Set date variables
-        run: |
-          echo "DATE_TAG=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
-          echo "DATE_BR=$(date +'%d-%m-%Y')" >> $GITHUB_ENV
-          echo "Debug - DATE_TAG: $(date +'%Y-%m-%d')"
-          echo "Debug - DATE_BR: $(date +'%d-%m-%Y')"
-
       - name: Check for changes
         id: check_changes
         run: |
           if [[ $(git status --porcelain) ]]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+            echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
             echo "No changes detected"
@@ -50,13 +45,13 @@ jobs:
           git config --local user.email "cr.cj@outlook.com"
           git config --local user.name "Carlos Carvalho"          
           git add data/*.parquet
-          git commit -m "Dados atualizados em [${{ env.DATE_BR }}]"
+          git commit -m "Dados atualizados em [${{ steps.check_changes.outputs.date_br }}]"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release with datasets
-        # if: steps.check_changes.outputs.has_changes == 'true'  # Temporariamente desabilitado para teste
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           TAG="data-${{ steps.check_changes.outputs.date_tag }}"
           gh release create "$TAG" \
@@ -68,7 +63,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Delete old releases
-        # if: steps.check_changes.outputs.has_changes == 'true'  # Temporariamente desabilitado para teste
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           gh release list --limit 100 --json tagName --jq '.[] | .tagName' | \
           tail -n +31 | \
