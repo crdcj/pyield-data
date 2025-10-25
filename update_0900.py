@@ -184,8 +184,9 @@ def update_vna_dataframe(
         logger.info(f"Data already up to date until {last_date_in_df}")
         return df_vna
 
-    business_days = yd.bday.generate(last_date_in_df, today, inclusive="right")
-    business_days = [date.date() for date in business_days]
+    business_days = yd.bday.generate(
+        last_date_in_df, today, inclusive="right"
+    ).to_list()
 
     if len(business_days) == 0:
         logger.info("No new business days to add")
@@ -289,7 +290,7 @@ def update_vna_dataframe(
 
 def is_business_day(date: dt.date) -> bool:
     """Check if the given date is a business day."""
-    return yd.bday.offset(date, 0).date() == date
+    return yd.bday.offset(date, 0) == date
 
 
 def is_pre_holiday(date: dt.date) -> bool:
