@@ -51,7 +51,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release with datasets
-        if: steps.check_changes.outputs.has_changes == 'true'
+        # if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           TAG="data-${{ steps.check_changes.outputs.date_tag }}"
           gh release create "$TAG" \
