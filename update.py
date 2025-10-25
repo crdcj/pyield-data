@@ -90,22 +90,9 @@ def update_tpf_dataset(target_date: dt.date) -> None:
 
 
 def main():
-    today = dt.datetime.now().date()
-    bz_today = dt.datetime.now(BZ_TIMEZONE).date()
-    if bz_today == today:
-        # Voltar um dia se as datas forem iguais
-        target_date = bz_today - dt.timedelta(days=1)  # Yesterday
-    else:
-        # Se as datas forem diferentes, Brasil está um dia atrás
-        # Logo já é a data correta
-        target_date = bz_today
-
+    target_date = yd.bday.last_business_day()
     # Force a specific date for testing purposes
-    target_date = dt.datetime.strptime("24-10-2025", "%d-%m-%Y").date()
-
-    if not yd.bday.is_business_day(target_date):
-        logger.warning("Target date is not a business day. Aborting...")
-        return
+    # target_date = dt.datetime.strptime("24-10-2025", "%d-%m-%Y").date()
 
     pre_xmas = dt.date(target_date.year, 12, 24)
     pre_ny = dt.date(target_date.year, 12, 31)
