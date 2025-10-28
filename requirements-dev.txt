@@ -1,5 +1,5 @@
-pandas
-pyarrow
-requests
-pyield
+# Inclui as dependências de produção
+-r requirements.txt
+
+# Dependências para desenvolvimento
 ipykernel
