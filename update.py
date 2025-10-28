@@ -27,6 +27,8 @@ logging.basicConfig(
 
 def get_di1_on_date(date: dt.date) -> pl.DataFrame:
     df = yd.futures(contract_code="DI1", date=date).drop("DaysToExp")
+    if df.is_empty():
+        raise ValueError("There is no DI1 data for today.")
     if "SettlementRate" not in df.columns:
         raise ValueError("There is no Settlement data for today.")
     return df
@@ -34,6 +36,8 @@ def get_di1_on_date(date: dt.date) -> pl.DataFrame:
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
     df = yd.anbima.tpf_data(date=date, fetch_from_source=True)
+    if df.is_empty():
+        raise ValueError("There is no TPF data for today.")
 
     selected_cols = [
         "BondType",

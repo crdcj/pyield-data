@@ -2,8 +2,7 @@ name: Atualização DI e Anbima
 
 on:
   schedule:
-    - cron: "30 00 * * 2-6"
-    - cron: "30 10 * * 2-6"
+    - cron: "30 00 * * 2-6" # 21:30 BRT    
   workflow_dispatch:
 
 jobs:
