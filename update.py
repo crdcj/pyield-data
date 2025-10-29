@@ -93,26 +93,26 @@ def main():
     if yd.bday.is_business_day(today):
         # É dia útil, então o horário importa
         if now.hour < 21:
-            trade_date = yd.bday.offset(today, -1)
+            target_date = yd.bday.offset(today, -1)
         else:
-            trade_date = today
+            target_date = today
     else:
         # Não é dia útil, então pegamos o último que existiu
-        trade_date = yd.bday.last_business_day(today)
+        target_date = yd.bday.last_business_day(today)
 
-    logger.info(f"Determined target trade date: {trade_date}")
+    logger.info(f"Determined target trade date: {target_date}")
     # Force a specific date for testing purposes
-    # target_date = dt.datetime.strptime("24-10-2025", "%d-%m-%Y").date()
+    target_date = dt.datetime.strptime("28-10-2025", "%d-%m-%Y").date()
 
-    pre_xmas = dt.date(trade_date.year, 12, 24)
-    pre_ny = dt.date(trade_date.year, 12, 31)
-    if trade_date in (pre_xmas, pre_ny):
+    pre_xmas = dt.date(target_date.year, 12, 24)
+    pre_ny = dt.date(target_date.year, 12, 31)
+    if target_date in (pre_xmas, pre_ny):
         logger.info("No trade updates on Christmas Eve or New Year's Eve.")
         exit(0)
 
     try:
-        update_di1_dataset(trade_date)
-        update_tpf_dataset(trade_date)
+        update_di1_dataset(target_date)
+        update_tpf_dataset(target_date)
     except Exception as e:
         logger.error(f"Failed to update datasets: {e}")
         raise
