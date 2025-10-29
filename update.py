@@ -102,7 +102,7 @@ def main():
 
     logger.info(f"Determined target trade date: {target_date}")
     # Force a specific date for testing purposes
-    target_date = dt.datetime.strptime("28-10-2025", "%d-%m-%Y").date()
+    # target_date = dt.datetime.strptime("28-10-2025", "%d-%m-%Y").date()
 
     pre_xmas = dt.date(target_date.year, 12, 24)
     pre_ny = dt.date(target_date.year, 12, 31)
