@@ -24,13 +24,29 @@ jobs:
         run: pip install -r requirements.txt
     
       - name: Run update script with retry
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_wait_seconds: 1800  # 30 minutos (1800 segundos)
-          command: python update.py
-          on_retry_command: echo "⏳ Tentativa falhou, aguardando 30 minutos para nova tentativa..."
+        run: |
+          max_attempts=3
+          retry_wait=1800  # 30 minutos
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "🔄 Tentativa $attempt de $max_attempts..."
+            
+            if timeout 15m python update.py; then
+              echo "✅ Script executado com sucesso!"
+              exit 0
+            else
+              if [ $attempt -lt $max_attempts ]; then
+                echo "⏳ Tentativa $attempt falhou, aguardando 30 minutos para nova tentativa..."
+                sleep $retry_wait
+              else
+                echo "❌ Todas as tentativas falharam"
+                exit 1
+              fi
+            fi
+            
+            attempt=$((attempt + 1))
+          done
 
       - name: Check for changes
         id: check_changes
