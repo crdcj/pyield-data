@@ -63,7 +63,7 @@ def update_di1_dataset(target_date: dt.date) -> None:
     df = pl.read_parquet(DI1_PARQUET)
     df_new = get_di1_on_date(target_date)
     (
-        pl.concat([df, df_new], how="diagonal")
+        pl.concat([df, df_new], how="diagonal_relaxed")
         .unique(subset=["TradeDate", "TickerSymbol"], keep="last")
         .sort(["TradeDate", "ExpirationDate"])
         .write_parquet(DI1_PARQUET, compression="gzip")
@@ -77,7 +77,7 @@ def update_tpf_dataset(target_date: dt.date) -> None:
 
     key_cols = ["ReferenceDate", "BondType", "MaturityDate"]
     (
-        pl.concat([df, df_new], how="diagonal")
+        pl.concat([df, df_new], how="diagonal_relaxed")
         .unique(subset=key_cols, keep="last")
         .sort(key_cols)
         .write_parquet(TPF_PARQUET, compression="gzip")
