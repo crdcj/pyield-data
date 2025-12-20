@@ -26,7 +26,9 @@ logging.basicConfig(
 
 
 def get_di1_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.futures(contract_code="DI1", date=date).drop("DaysToExp")
+    df = yd.futures(contract_code="DI1", date=date)
+    if "DaysToExp" in df.columns:
+        df = df.drop("DaysToExp")
     if df.is_empty():
         raise ValueError("There is no DI1 data for today.")
     if "SettlementRate" not in df.columns:
