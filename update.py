@@ -65,7 +65,7 @@ def update_di1_dataset(target_date: dt.date) -> None:
     (
         pl.concat([df, df_new], how="diagonal_relaxed")
         .unique(subset=["TradeDate", "TickerSymbol"], keep="last")
-        .sort(["TradeDate", "ExpirationDate"])
+        .sort("TradeDate", "ExpirationDate")
         .write_parquet(DI1_PARQUET, compression="gzip")
     )
     logger.info(f"DI dataset updated with data from {target_date}")
