@@ -2,12 +2,11 @@ name: Atualização DI e Anbima
 
 on:
   schedule:
-    - cron: "30 00 * * 2-6" # 21:30 BRT
-    - cron: "25 09 * * 2-6"   # 02:30 BRT
+    - cron: "30 02 * * 1-5" # De segunda a sexta às 02:30 UTC (23:30 BRT)
   workflow_dispatch:
     inputs:
       force_release:
-        description: 'Forçar criação do Release?'
+        description: 'Forçar Release mesmo sem mudanças no Git?'
         required: false
         default: true
         type: boolean
@@ -32,47 +31,43 @@ jobs:
     
       - name: Run update script with retry
         run: |
+          # Seu script de retry original...
           max_attempts=3
-          retry_wait=1800  # 30 minutos
+          retry_wait=1800
           attempt=1
-          
           while [ $attempt -le $max_attempts ]; do
             echo "🔄 Tentativa $attempt de $max_attempts..."
-            
             if timeout 15m python update.py; then
               echo "✅ Script executado com sucesso!"
               exit 0
             else
               if [ $attempt -lt $max_attempts ]; then
-                echo "⏳ Tentativa $attempt falhou, aguardando 30 minutos para nova tentativa..."
                 sleep $retry_wait
               else
-                echo "❌ Todas as tentativas falharam"
                 exit 1
               fi
             fi
-            
             attempt=$((attempt + 1))
           done
 
       - name: Check for changes
         id: check_changes
         run: |
-          # 1. Gera as datas SEMPRE, independente de ter mudança
+          # 1. Definimos as datas AQUI fora, para estarem sempre disponíveis
           echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
           echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
           
-          # 2. Verifica o git status
+          # 2. Verificamos o Git
           if [[ $(git status --porcelain) ]]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "Mudanças detectadas pelo Git."
+            echo "Status: Mudanças detectadas."
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "Nenhuma mudança de arquivo detectada."
+            echo "Status: Nenhuma mudança no Git detectada."
           fi
 
       - name: Commit and push changes
-        # Só executa o commit se o GIT detectou mudanças reais
+        # SÓ roda se o Git detectou mudanças reais
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git config --local user.email "cr.cj@outlook.com"
@@ -84,23 +79,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release with datasets
-        # Executa se tiver mudanças OU se foi disparado manualmente com a flag 'force_release'
-        if: steps.check_changes.outputs.has_changes == 'true' || inputs.force_release == true
+        # Roda se tiver mudanças OU se você mandou rodar manualmente (workflow_dispatch)
+        if: steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           TAG="data-${{ steps.check_changes.outputs.date_tag }}"
           
-          echo "Gerando release para tag: $TAG"
+          echo "Preparando release $TAG..."
           
-          # Se for execução manual forçada, deletamos a tag/release anterior do dia para recriar
-          if [[ "${{ inputs.force_release }}" == "true" ]]; then
+          # Se for manual, deletamos a tag antiga para recriar sem dar erro
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+             echo "Modo manual: Sobrescrevendo release existente..."
              gh release delete "$TAG" --yes || true
              git tag -d "$TAG" || true
-             # Aguarda um pouco para o GitHub processar a deleção
-             sleep 5 
-             # Puxa as tags remotas atualizadas para garantir que não haja conflito local
-             git fetch --tags || true
+             git push --delete origin "$TAG" || true
+             sleep 5 # Pausa para o GitHub processar
           fi
 
+          # Cria o release pegando os arquivos FÍSICOS da pasta data/
           gh release create "$TAG" \
             data/b3_di.parquet \
             data/anbima_tpf.parquet \
@@ -110,7 +105,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Delete old releases
-        if: steps.check_changes.outputs.has_changes == 'true'
+        # Roda também se for manual ou tiver mudanças
+        if: steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           gh release list --limit 100 --json tagName --jq '.[] | .tagName' | \
           tail -n +31 | \
