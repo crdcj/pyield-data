@@ -98,7 +98,7 @@ def main():
             target_date = today
     else:
         # Não é dia útil, então pegamos o último que existiu
-        target_date = yd.bday.last_business_day(today)
+        target_date = yd.bday.last_business_day()
 
     logger.info(f"Determined target trade date: {target_date}")
     # Force a specific date for testing purposes
