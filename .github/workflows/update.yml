@@ -5,6 +5,12 @@ on:
     - cron: "30 00 * * 2-6" # 21:30 BRT
     - cron: "25 09 * * 2-6"   # 02:30 BRT
   workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Forçar criação do Release?'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   update-datasets:
@@ -52,16 +58,21 @@ jobs:
       - name: Check for changes
         id: check_changes
         run: |
+          # 1. Gera as datas SEMPRE, independente de ter mudança
+          echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+          
+          # 2. Verifica o git status
           if [[ $(git status --porcelain) ]]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-            echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+            echo "Mudanças detectadas pelo Git."
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "No changes detected"
+            echo "Nenhuma mudança de arquivo detectada."
           fi
 
       - name: Commit and push changes
+        # Só executa o commit se o GIT detectou mudanças reais
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git config --local user.email "cr.cj@outlook.com"
@@ -73,9 +84,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release with datasets
-        if: steps.check_changes.outputs.has_changes == 'true'
+        # Executa se tiver mudanças OU se foi disparado manualmente com a flag 'force_release'
+        if: steps.check_changes.outputs.has_changes == 'true' || inputs.force_release == true
         run: |
           TAG="data-${{ steps.check_changes.outputs.date_tag }}"
+          
+          echo "Gerando release para tag: $TAG"
+          
+          # Se for execução manual forçada, deletamos a tag/release anterior do dia para recriar
+          if [[ "${{ inputs.force_release }}" == "true" ]]; then
+             gh release delete "$TAG" --yes || true
+             git tag -d "$TAG" || true
+             # Aguarda um pouco para o GitHub processar a deleção
+             sleep 5 
+             # Puxa as tags remotas atualizadas para garantir que não haja conflito local
+             git fetch --tags || true
+          fi
+
           gh release create "$TAG" \
             data/b3_di.parquet \
             data/anbima_tpf.parquet \
