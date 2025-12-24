@@ -26,13 +26,13 @@ logging.basicConfig(
 
 
 def get_di1_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.futures(contract_code="DI1", date=date)
-    if "DaysToExp" in df.columns:
-        df = df.drop("DaysToExp")
+    df = yd.b3.fetch_price_report(
+        date=date,
+        contract_code="DI1",
+        source_type="PR",
+    )
     if df.is_empty():
         raise ValueError("There is no DI1 data for today.")
-    if "SettlementRate" not in df.columns:
-        raise ValueError("There is no Settlement data for today.")
     return df
 
 
@@ -104,7 +104,7 @@ def main():
 
     logger.info(f"Determined target trade date: {target_date}")
     # Force a specific date for testing purposes
-    # target_date = dt.datetime.strptime("28-10-2025", "%d-%m-%Y").date()
+    target_date = dt.date.strptime("23-12-2025", "%d-%m-%Y")
 
     pre_xmas = dt.date(target_date.year, 12, 24)
     pre_ny = dt.date(target_date.year, 12, 31)
