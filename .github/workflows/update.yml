@@ -2,7 +2,7 @@ name: Atualização DI e Anbima
 
 on:
   schedule:
-    - cron: "30 02 * * 1-5" # De segunda a sexta às 02:30 UTC (23:30 BRT)
+    - cron: "30 01 * * 2-6" # De terça a sábado às 01:30 UTC (= 22:30 BRT do dia anterior)
   workflow_dispatch:
     inputs:
       force_release:
