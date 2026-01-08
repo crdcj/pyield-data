@@ -1,13 +1,9 @@
 import datetime as dt
 import logging
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import polars as pl
 import pyield as yd
-
-# Configurações e constantes
-BZ_TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 # Os arquivos estão na pasta data
 base_dir = Path(__file__).parent
@@ -88,7 +84,7 @@ def update_tpf_dataset(target_date: dt.date) -> None:
 
 
 def main():
-    now = dt.datetime.now(BZ_TIMEZONE)
+    now = yd.now()
     today = now.date()
 
     # Usando is_business_day torna a intenção mais explícita
