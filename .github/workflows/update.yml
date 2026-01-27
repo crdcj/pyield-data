@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force_release:
-        description: 'Forçar Release mesmo sem mudanças no Git?'
+        description: "Forçar Release mesmo sem mudanças no Git?"
         required: false
         default: true
         type: boolean
@@ -16,19 +16,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.14"
-    
+
       - name: Install dependencies
         run: pip install -r requirements.txt
-    
+
       - name: Run update script with retry
         run: |
           # Seu script de retry original...
@@ -50,20 +50,21 @@ jobs:
             attempt=$((attempt + 1))
           done
 
-      - name: Check for changes
+      - name: Check for changes (Timezone Strategy)
         id: check_changes
         run: |
-          # 1. Definimos as datas AQUI fora, para estarem sempre disponíveis
+          # Define o fuso para Brasil (UTC-3)
+          export TZ="America/Sao_Paulo"
+
+          # Como são 22:30 do dia anterior no Brasil quando o job roda (01:30 UTC),
+          # o comando date vai retornar a data de "ontem" corretamente.
           echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
           echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
-          
-          # 2. Verificamos o Git
+
           if [[ $(git status --porcelain) ]]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "Status: Mudanças detectadas."
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "Status: Nenhuma mudança no Git detectada."
           fi
 
       - name: Commit and push changes
@@ -71,7 +72,7 @@ jobs:
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git config --local user.email "cr.cj@outlook.com"
-          git config --local user.name "Carlos Carvalho"          
+          git config --local user.name "Carlos Carvalho"
           git add data/*.parquet
           git commit -m "Dados atualizados em [${{ steps.check_changes.outputs.date_br }}]"
           git push
@@ -83,9 +84,9 @@ jobs:
         if: steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           TAG="data-${{ steps.check_changes.outputs.date_tag }}"
-          
+
           echo "Preparando release $TAG..."
-          
+
           # Se for manual, deletamos a tag antiga para recriar sem dar erro
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
              echo "Modo manual: Sobrescrevendo release existente..."
