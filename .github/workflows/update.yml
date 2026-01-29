@@ -1,15 +1,9 @@
-name: Atualização DI e Anbima
+name: Atualização DI e Anbima (Artifact-Based)
 
 on:
   schedule:
-    - cron: "30 01 * * 2-6" # De terça a sábado às 01:30 UTC (= 22:30 BRT do dia anterior)
+    - cron: "30 01 * * 2-6" # 22:30 BRT
   workflow_dispatch:
-    inputs:
-      force_release:
-        description: "Forçar Release mesmo sem mudanças no Git?"
-        required: false
-        default: true
-        type: boolean
 
 jobs:
   update-datasets:
@@ -29,88 +23,58 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run update script with retry
+      - name: Download data from Latest Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Seu script de retry original...
-          max_attempts=3
-          retry_wait=1800
-          attempt=1
-          while [ $attempt -le $max_attempts ]; do
-            echo "🔄 Tentativa $attempt de $max_attempts..."
-            if timeout 15m python update.py; then
-              echo "✅ Script executado com sucesso!"
-              exit 0
-            else
-              if [ $attempt -lt $max_attempts ]; then
-                sleep $retry_wait
-              else
-                exit 1
-              fi
-            fi
-            attempt=$((attempt + 1))
-          done
+          echo "📥 Baixando arquivos do último release..."
+          mkdir -p data          
+          # Baixar todos os arquivos (assets) do release marcado como 'Latest'
+          gh release download --pattern "*" --dir data
+          
+          echo "✅ Arquivos recuperados:"
+          ls -R data/
+
+      - name: Run update script
+        run: |
+          # O script Python agora encontrará os arquivos na pasta data/
+          python update.py
 
       - name: Check for changes (Timezone Strategy)
         id: check_changes
         run: |
-          # Define o fuso para Brasil (UTC-3)
           export TZ="America/Sao_Paulo"
-
-          # Como são 22:30 do dia anterior no Brasil quando o job roda (01:30 UTC),
-          # o comando date vai retornar a data de "ontem" corretamente.
           echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT          
+          echo "has_changes=true" >> $GITHUB_OUTPUT
 
-          if [[ $(git status --porcelain) ]]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Commit and push changes
-        # SÓ roda se o Git detectou mudanças reais
+      # --- PASSO MODIFICADO: Publicar novo estado ---
+      - name: Create New Release
         if: steps.check_changes.outputs.has_changes == 'true'
-        run: |
-          git config --local user.email "cr.cj@outlook.com"
-          git config --local user.name "Carlos Carvalho"
-          git add data/*.parquet
-          git commit -m "Dados atualizados em [${{ steps.check_changes.outputs.date_br }}]"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create Release with datasets
-        # Roda se tiver mudanças OU se você mandou rodar manualmente (workflow_dispatch)
-        if: steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
-        run: |
-          TAG="data-${{ steps.check_changes.outputs.date_tag }}"
-
-          echo "Preparando release $TAG..."
-
-          # Se for manual, deletamos a tag antiga para recriar sem dar erro
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-             echo "Modo manual: Sobrescrevendo release existente..."
-             gh release delete "$TAG" --yes || true
-             git tag -d "$TAG" || true
-             git push --delete origin "$TAG" || true
-             sleep 5 # Pausa para o GitHub processar
-          fi
-
-          # Cria o release pegando os arquivos FÍSICOS da pasta data/
-          gh release create "$TAG" \
-            data/b3_di.parquet \
-            data/anbima_tpf.parquet \
-            --title "Dados ${{ steps.check_changes.outputs.date_br }}" \
-            --notes "Atualização diária - Dados de ${{ steps.check_changes.outputs.date_br }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="data-${{ steps.check_changes.outputs.date_tag }}"
+          
+          # Limpeza de segurança para permitir re-execuções no mesmo dia
+          gh release delete "$TAG" --yes || true
+          git tag -d "$TAG" || true
+          git push --delete origin "$TAG" || true
+          sleep 5
 
-      - name: Delete old releases
-        # Roda também se for manual ou tiver mudanças
-        if: steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
+          # Cria o release e sobe TODOS os arquivos que estiverem na pasta data/
+          # O uso do 'data/*' é o que garante o espelhamento total.
+          gh release create "$TAG" \
+            data/* \
+            --title "Dados ${{ steps.check_changes.outputs.date_br }}" \
+            --notes "Atualização automática diária via Artifact-based workflow." \
+            --latest
+
+      - name: Delete old releases (Keep last 30)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release list --limit 100 --json tagName --jq '.[] | .tagName' | \
           tail -n +31 | \
-          xargs -I {} gh release delete {} --yes || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xargs -I {} gh release delete {} --yes
