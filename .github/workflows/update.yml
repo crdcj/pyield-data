@@ -15,13 +15,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
+        run: uv python install 3.14
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: uv pip install -r requirements.txt --system
 
       - name: Download data from Latest Release
         env:
