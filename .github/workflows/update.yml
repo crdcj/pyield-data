@@ -1,0 +1,116 @@
+name: Atualização DI e Anbima
+
+on:
+  schedule:
+    - cron: "30 01 * * 2-6" # De terça a sábado às 01:30 UTC (= 22:30 BRT do dia anterior)
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: "Forçar Release mesmo sem mudanças no Git?"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  update-datasets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run update script with retry
+        run: |
+          # Seu script de retry original...
+          max_attempts=3
+          retry_wait=1800
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            echo "🔄 Tentativa $attempt de $max_attempts..."
+            if timeout 15m python update.py; then
+              echo "✅ Script executado com sucesso!"
+              exit 0
+            else
+              if [ $attempt -lt $max_attempts ]; then
+                sleep $retry_wait
+              else
+                exit 1
+              fi
+            fi
+            attempt=$((attempt + 1))
+          done
+
+      - name: Check for changes (Timezone Strategy)
+        id: check_changes
+        run: |
+          # Define o fuso para Brasil (UTC-3)
+          export TZ="America/Sao_Paulo"
+
+          # Como são 22:30 do dia anterior no Brasil quando o job roda (01:30 UTC),
+          # o comando date vai retornar a data de "ontem" corretamente.
+          echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+
+          if [[ $(git status --porcelain) ]]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push changes
+        # SÓ roda se o Git detectou mudanças reais
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git config --local user.email "cr.cj@outlook.com"
+          git config --local user.name "Carlos Carvalho"
+          git add data/*.parquet
+          git commit -m "Dados atualizados em [${{ steps.check_changes.outputs.date_br }}]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release with datasets
+        # Roda se tiver mudanças OU se você mandou rodar manualmente (workflow_dispatch)
+        if: steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="data-${{ steps.check_changes.outputs.date_tag }}"
+
+          echo "Preparando release $TAG..."
+
+          # Se for manual, deletamos a tag antiga para recriar sem dar erro
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+             echo "Modo manual: Sobrescrevendo release existente..."
+             gh release delete "$TAG" --yes || true
+             git tag -d "$TAG" || true
+             git push --delete origin "$TAG" || true
+             sleep 5 # Pausa para o GitHub processar
+          fi
+
+          # Cria o release pegando os arquivos FÍSICOS da pasta data/
+          gh release create "$TAG" \
+            data/b3_di.parquet \
+            data/anbima_tpf.parquet \
+            --title "Dados ${{ steps.check_changes.outputs.date_br }}" \
+            --notes "Atualização diária - Dados de ${{ steps.check_changes.outputs.date_br }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old releases
+        # Roda também se for manual ou tiver mudanças
+        if: steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[] | .tagName' | \
+          tail -n +31 | \
+          xargs -I {} gh release delete {} --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
