@@ -1,13 +1,16 @@
-name: Atualização Projeção Inflação
+name: Atualização Projeção Inflação (Artifact-Based)
 
 on:
   schedule:
-    - cron: "00 12 * * 1-5" # Executa às 09:00 de segunda a sexta
-  workflow_dispatch: null
+    - cron: "00 12 * * 1-5" # 12:00 UTC = 09:00 BRT
+  workflow_dispatch:
 
 jobs:
   update-datasets:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Essencial para baixar e criar releases
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
@@ -26,22 +29,55 @@ jobs:
           sudo apt-get install -y locales
           sudo locale-gen pt_BR.UTF-8
           sudo update-locale
-    
+
+      - name: Download data from Latest Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📥 Baixando arquivos do último release para atualização..."
+          mkdir -p data
+          # Baixa tudo o que estiver no release atual para a pasta data/
+          gh release download --pattern "*" --dir data || echo "⚠️ Nenhum release encontrado."
+          ls -R data/
+
       - name: Run update script
         run: python update_0900.py
 
-      - name: Commit and push changes
+      - name: Set Date Tags
+        id: dates
         run: |
-          git config --local user.email "cr.cj@outlook.com"
-          git config --local user.name "Carlos Carvalho"          
-          if [[ $(git status --porcelain) ]]
-          then
-            git add *.parquet  # Add all parquet files
-            git add data/  # Add all files created in the data folder
-            git commit -m "Dados atualizados em [$(date +'%d-%m-%Y')]"
-            git push
-          else
-            echo "No changes to commit. Exiting gracefully."
-          fi
+          export TZ="America/Sao_Paulo"
+          echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+
+      - name: Create/Update Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="data-${{ steps.dates.outputs.date_tag }}"
+          
+          # Se o Job de madrugada já criou o release de hoje, 
+          # o comando abaixo apenas atualiza os arquivos (faz o upload por cima).
+          # Se não existir, ele cria um novo.
+          
+          echo "🚀 Atualizando release $TAG com novos dados de inflação..."
+          
+          # O comando 'gh release create' com files e sem 'delete' 
+          # pode falhar se a tag já existir, então usamos 'upload' se existir
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" data/* --clobber
+          else
+            gh release create "$TAG" data/* \
+              --title "Dados ${{ steps.dates.outputs.date_br }}" \
+              --notes "Atualização automática de inflação e datasets." \
+              --latest
+          fi
+
+      - name: Delete old releases (Keep last 30)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[] | .tagName' | \
+          tail -n +31 | \
+          xargs -I {} gh release delete {} --yes
