@@ -1,0 +1,5 @@
+# Inclui as dependências de produção
+-r requirements.txt
+
+# Dependências para desenvolvimento
+ipykernel

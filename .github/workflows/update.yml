@@ -1,0 +1,80 @@
+name: Atualização DI e Anbima (Artifact-Based)
+
+on:
+  schedule:
+    - cron: "30 01 * * 2-6" # 22:30 BRT
+  workflow_dispatch:
+
+jobs:
+  update-datasets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+    
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download data from Latest Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📥 Baixando arquivos do último release..."
+          mkdir -p data          
+          # Baixar todos os arquivos (assets) do release marcado como 'Latest'
+          gh release download --pattern "*" --dir data
+          
+          echo "✅ Arquivos recuperados:"
+          ls -R data/
+
+      - name: Run update script
+        run: |
+          # O script Python agora encontrará os arquivos na pasta data/
+          python update.py
+
+      - name: Check for changes (Timezone Strategy)
+        id: check_changes
+        run: |
+          export TZ="America/Sao_Paulo"
+          echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT          
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+
+      # --- PASSO MODIFICADO: Publicar novo estado ---
+      - name: Create New Release
+        if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="data-${{ steps.check_changes.outputs.date_tag }}"
+          
+          # Limpeza de segurança para permitir re-execuções no mesmo dia
+          gh release delete "$TAG" --yes || true
+          git tag -d "$TAG" || true
+          git push --delete origin "$TAG" || true
+          sleep 5
+
+          # Cria o release e sobe TODOS os arquivos que estiverem na pasta data/
+          # O uso do 'data/*' é o que garante o espelhamento total.
+          gh release create "$TAG" \
+            data/* \
+            --title "Dados ${{ steps.check_changes.outputs.date_br }}" \
+            --notes "Atualização automática diária via Artifact-based workflow." \
+            --latest
+
+      - name: Delete old releases (Keep last 30)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[] | .tagName' | \
+          tail -n +31 | \
+          xargs -I {} gh release delete {} --yes
