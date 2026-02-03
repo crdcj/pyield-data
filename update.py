@@ -23,6 +23,31 @@ def get_di1_on_date(date: dt.date) -> pl.DataFrame:
         contract_code="DI1",
         source_type="PR",
     )
+    selected_cols = [
+        "TradeDate",
+        "ExpirationDate",
+        "TickerSymbol",
+        "DaysToExp",
+        "BDaysToExp",
+        "OpenContracts",
+        "TradeCount",
+        "TradeVolume",
+        "FinancialVolume",
+        "DV01",
+        "SettlementPrice",
+        "MinLimitRate",
+        "MaxLimitRate",
+        "BestBidRate",
+        "BestAskRate",
+        "OpenRate",
+        "MinRate",
+        "AvgRate",
+        "MaxRate",
+        "CloseRate",
+        "SettlementRate",
+        "ForwardRate",
+    ]
+    selected_cols = [col for col in selected_cols if col in df.columns]
     return df
 
 
@@ -79,7 +104,7 @@ def update_dataset(target_date: dt.date, config: DatasetConfig) -> None:
         pl.concat([df, df_new], how="diagonal_relaxed")
         .unique(subset=config.id_cols, keep="last")
         .sort(config.id_cols)
-        .write_parquet(config.parquet_path, compression="gzip")
+        .write_parquet(config.parquet_path)
     )
 
     logger.info(f"{config.dataset_name} dataset updated with data from {target_date}")
