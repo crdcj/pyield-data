@@ -48,7 +48,7 @@ def get_di1_on_date(date: dt.date) -> pl.DataFrame:
         "ForwardRate",
     ]
     selected_cols = [col for col in selected_cols if col in df.columns]
-    return df
+    return df.select(selected_cols)
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
