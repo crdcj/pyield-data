@@ -12,6 +12,7 @@ base_dir = Path(__file__).parent
 data_dir = base_dir / "data"
 DI1_PARQUET = data_dir / "b3_di.parquet"
 TPF_PARQUET = data_dir / "anbima_tpf.parquet"
+PR_PARQUET = data_dir / "b3_price_report.parquet"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
