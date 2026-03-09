@@ -1,9 +1,10 @@
-"""Parser simples do price report da B3 a partir de bytes XML descomprimidos."""
-
 import io
 import logging
+import zipfile
+from datetime import date
 
 import polars as pl
+import requests
 from lxml import etree  # pyright: ignore[reportAttributeAccessIssue]
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -80,6 +81,38 @@ MAPA_RENOMEACAO_DATASET_PR = {
     "MaxTradLmt": "MaxLimitValue",
     "MinTradLmt": "MinLimitValue",
 }
+
+
+def _url(trade_date: date) -> str:
+    return f"https://www.b3.com.br/pesquisapregao/download?filelist=PR{trade_date:%y%m%d}.zip"
+
+
+def _extrair_xml(conteudo_zip: bytes) -> bytes:
+    """Extrai o XML mais recente de dentro do ZIP aninhado (zip > zip > xml)."""
+    with zipfile.ZipFile(io.BytesIO(conteudo_zip)) as zf_ext:
+        with zipfile.ZipFile(io.BytesIO(zf_ext.read(zf_ext.namelist()[0]))) as zf_int:
+            xmls = [i for i in zf_int.infolist() if i.filename.lower().endswith(".xml")]
+            mais_recente = max(xmls, key=lambda i: (i.date_time, i.filename))
+            return zf_int.read(mais_recente.filename)
+
+
+def baixar(trade_date: date) -> bytes | None:
+    """Baixa o PR da data e retorna o XML em memória."""
+
+    try:
+        resp = requests.get(_url(trade_date), timeout=(5, 10))
+        resp.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        log.warning("Falha ao baixar %s: %s", trade_date, e)
+        return
+
+    if len(resp.content) < 1024:
+        log.info("Sem dados para %s", trade_date)
+        return
+
+    xml = _extrair_xml(resp.content)
+    log.info("XML carregado em memória para %s", trade_date)
+    return xml
 
 
 def _ticker_valido(ticker: str) -> bool:
@@ -160,22 +193,20 @@ def _parse_xml(xml_bytes: bytes) -> list[dict]:
     return registros
 
 
-def parse_price_report(file_bytes: bytes) -> pl.DataFrame | None:
+def parse_price_report(file_bytes: bytes) -> pl.DataFrame:
     """Parseia bytes de XML já descomprimidos e retorna o dataframe consolidado."""
     registros = _parse_xml(file_bytes)
 
     if not registros:
         log.warning("Nenhum registro encontrado.")
-        return
+        return pl.DataFrame()
 
     df = pl.DataFrame(registros)
     selected_cols = [c for c in TIPOS if c in df.columns]
-    float_cols = [c for c in selected_cols if TIPOS[c] == pl.Float64]
     tipos_presentes = {c: TIPOS[c] for c in selected_cols}
 
     df = (
         df.select(selected_cols)
-        .with_columns(pl.col(float_cols).str.replace(",", "."))
         .cast(tipos_presentes, strict=False)  # pyright: ignore[reportArgumentType]
         .sort("TckrSymb", "TradDt")
         .rename(MAPA_RENOMEACAO_DATASET_PR, strict=False)
@@ -183,3 +214,13 @@ def parse_price_report(file_bytes: bytes) -> pl.DataFrame | None:
     log.info("Shape final: %s", df.shape)
 
     return df
+
+
+def fetch_price_report_by_date(trade_date: date) -> pl.DataFrame:
+    """Baixa o PR por data, carrega em memória e retorna o dataframe consolidado."""
+    xml_bytes = baixar(trade_date)
+    if xml_bytes is None:
+        # Retorna DataFrame vazio para sinalizar ausência de dados
+        return pl.DataFrame()
+
+    return parse_price_report(xml_bytes)

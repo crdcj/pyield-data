@@ -7,6 +7,8 @@ from pathlib import Path
 import polars as pl
 import pyield as yd
 
+from parse_price_report import fetch_price_report_by_date
+
 # Os arquivos estão na pasta data
 base_dir = Path(__file__).parent
 data_dir = base_dir / "data"
@@ -126,6 +128,13 @@ TPF_CONFIG = DatasetConfig(
     dataset_name="TPF",
 )
 
+PR_CONFIG = DatasetConfig(
+    parquet_path=PR_PARQUET,
+    fetch_function=fetch_price_report_by_date,
+    id_cols=["TradeDate", "TickerSymbol"],
+    dataset_name="B3 Price Report",
+)
+
 
 def determine_target_date() -> dt.date:
     """
@@ -171,6 +180,7 @@ def main() -> None:
     try:
         update_dataset(target_date, DI1_CONFIG)
         update_dataset(target_date, TPF_CONFIG)
+        update_dataset(target_date, PR_CONFIG)
     except Exception as e:
         logger.error(f"Failed to update datasets: {e}")
         raise
