@@ -14,7 +14,7 @@ NS = {"ns": "urn:bvmf.217.01.xsd"}
 
 # Contratos de interesse (prefixo de 3 chars do ticker)
 # Baseado em pyield.b3.futures, incluindo FRO por regra do projeto.
-ASSET_CODES = {"DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN", "CPM"}
+ASSET_CODES = {"DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"}
 
 
 # Colunas ativas do consolidado (chave=nome da coluna, valor=tipo polars).
