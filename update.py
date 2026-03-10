@@ -21,37 +21,15 @@ logging.basicConfig(level=logging.INFO)
 
 
 def get_di1_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.b3.fetch_price_report(
+    df = yd.futures(
         date=date,
         contract_code="DI1",
-        source_type="PR",
+        full_report=True,
     )
-    selected_cols = [
-        "TradeDate",
-        "ExpirationDate",
-        "TickerSymbol",
-        "DaysToExp",
-        "BDaysToExp",
-        "OpenContracts",
-        "TradeCount",
-        "TradeVolume",
-        "FinancialVolume",
-        "DV01",
-        "SettlementPrice",
-        "MinLimitRate",
-        "MaxLimitRate",
-        "BestBidRate",
-        "BestAskRate",
-        "OpenRate",
-        "MinRate",
-        "AvgRate",
-        "MaxRate",
-        "CloseRate",
-        "SettlementRate",
-        "ForwardRate",
-    ]
-    selected_cols = [col for col in selected_cols if col in df.columns]
-    return df.select(selected_cols)
+    if "SettlementRate" not in df.columns:
+        raise ValueError(f"SettlementRate column not found in DI1 data for {date}")
+
+    return df
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
