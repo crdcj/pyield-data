@@ -7,8 +7,6 @@ from pathlib import Path
 import polars as pl
 import pyield as yd
 
-from parse_price_report import fetch_price_report_by_date
-
 # Os arquivos estão na pasta data
 base_dir = Path(__file__).parent
 data_dir = base_dir / "data"
@@ -28,6 +26,18 @@ def get_di1_on_date(date: dt.date) -> pl.DataFrame:
     )
     if "SettlementRate" not in df.columns:
         raise ValueError(f"SettlementRate column not found in DI1 data for {date}")
+
+    return df
+
+
+def get_futures_on_date(date: dt.date) -> pl.DataFrame:
+    df = yd.b3.fetch_price_report(
+        date=date,
+        contract_code=["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"],
+        full_report=True,
+    )
+    if df.is_empty():
+        raise ValueError(f"No futures data available for {date}")
 
     return df
 
@@ -108,7 +118,7 @@ TPF_CONFIG = DatasetConfig(
 
 PR_CONFIG = DatasetConfig(
     parquet_path=PR_PARQUET,
-    fetch_function=fetch_price_report_by_date,
+    fetch_function=get_futures_on_date,
     id_cols=["TradeDate", "TickerSymbol"],
     dataset_name="B3 Price Report",
 )
