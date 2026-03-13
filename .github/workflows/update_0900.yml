@@ -19,9 +19,12 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"
+
+      - name: Create virtual environment
+        run: uv venv
     
       - name: Install dependencies
-        run: uv pip install --system -r requirements.txt
+        run: uv pip install -r requirements.txt
 
       - name: Install required locales
         run: |
@@ -41,7 +44,7 @@ jobs:
           ls -R data/
 
       - name: Run update script
-        run: python update_0900.py
+        run: uv run python update_0900.py
 
       - name: Set Date Tags
         id: dates
