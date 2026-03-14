@@ -38,10 +38,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "📥 Baixando arquivos do último release para atualização..."
-          mkdir -p data
-          # Baixa tudo o que estiver no release atual para a pasta data/
-          gh release download --pattern "*" --dir data || echo "⚠️ Nenhum release encontrado."
-          ls -R data/
+          mkdir -p release_staging
+          # Baixa tudo o que estiver no release atual para release_staging/
+          gh release download --pattern "*" --dir release_staging || echo "⚠️ Nenhum release encontrado."
+          ls -R release_staging/
 
       - name: Run update script
         run: uv run python update_0900.py
@@ -68,9 +68,9 @@ jobs:
           # O comando 'gh release create' com files e sem 'delete' 
           # pode falhar se a tag já existir, então usamos 'upload' se existir
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" data/* --clobber
+            gh release upload "$TAG" release_staging/* --clobber
           else
-            gh release create "$TAG" data/* \
+            gh release create "$TAG" release_staging/* \
               --title "Dados ${{ steps.dates.outputs.date_br }}" \
               --notes "Atualização automática de inflação e datasets." \
               --latest

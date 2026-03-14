@@ -7,12 +7,13 @@ from pathlib import Path
 import polars as pl
 import pyield as yd
 
-# Os arquivos estão na pasta data
-base_dir = Path(__file__).parent
-data_dir = base_dir / "data"
-DI1_PARQUET = data_dir / "b3_di.parquet"
-TPF_PARQUET = data_dir / "anbima_tpf.parquet"
-PR_PARQUET = data_dir / "b3_price_report.parquet"
+# Artefatos locais do workflow: o job baixa do latest release para
+# `release_staging/`, atualiza em memoria e depois publica novamente no release.
+BASE_DIR = Path(__file__).parent
+RELEASE_DATA_DIR = BASE_DIR / "release_staging"
+DI1_PARQUET = RELEASE_DATA_DIR / "b3_di.parquet"
+TPF_PARQUET = RELEASE_DATA_DIR / "anbima_tpf.parquet"
+PR_PARQUET = RELEASE_DATA_DIR / "b3_price_report.parquet"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +53,7 @@ def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
         "MaturityDate",
         "BDToMat",
         "Duration",
+        "AvgMaturity",
         "DV01",
         "DV01USD",
         "Price",
@@ -78,6 +80,10 @@ def update_dataset(target_date: dt.date, config: DatasetConfig) -> None:
     """
     Atualiza um dataset parquet com novos dados.
 
+    O processamento ocorre em memoria (`df` e `df_new`). O unico estado persistido
+    e o arquivo parquet em `release_staging/`, que o workflow publica como
+    asset do release.
+
     Args:
         target_date: Data dos dados a serem buscados
         config: Configuração do dataset a ser atualizado
@@ -85,7 +91,14 @@ def update_dataset(target_date: dt.date, config: DatasetConfig) -> None:
     Raises:
         ValueError: Se não houver dados disponíveis para a data especificada
     """
+    if not config.parquet_path.exists():
+        raise FileNotFoundError(
+            f"Missing base dataset for {config.dataset_name}: {config.parquet_path}. "
+            "Refusing to recreate from scratch to avoid release history reset."
+        )
+
     df = pl.read_parquet(config.parquet_path)
+
     df_new = config.fetch_function(target_date)
 
     if df_new.is_empty():

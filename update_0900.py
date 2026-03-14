@@ -16,7 +16,7 @@ getcontext().prec = 28
 BZ_TIMEZONE = ZoneInfo("America/Sao_Paulo")
 IBGE_CALENDAR_URL = "https://servicodados.ibge.gov.br/api/v3/calendario/"
 
-# Files are in the data folder
+# Local workflow staging folder (downloaded from/reuploaded to release assets)
 
 try:
     # Try to use __file__ (works in scripts)
@@ -24,9 +24,9 @@ try:
 except NameError:
     # Fall back to current working directory (for interactive sessions)
     base_dir = Path.cwd()
-data_dir = base_dir / "data"
-VNA_BASE_CSV = data_dir / "vna_base.csv"
-VNA_PARQUET = data_dir / "vna_ntnb.parquet"
+release_staging_dir = base_dir / "release_staging"
+VNA_BASE_CSV = release_staging_dir / "vna_base.csv"
+VNA_PARQUET = release_staging_dir / "vna_ntnb.parquet"
 
 # Configure logging
 logger = logging.getLogger(__name__)

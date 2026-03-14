@@ -31,16 +31,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "📥 Baixando arquivos do último release..."
-          mkdir -p data          
+          mkdir -p release_staging
           # Baixar todos os arquivos (assets) do release marcado como 'Latest'
-          gh release download --pattern "*" --dir data
+          gh release download --pattern "*" --dir release_staging
           
           echo "✅ Arquivos recuperados:"
-          ls -R data/
+          ls -R release_staging/
 
       - name: Run update script
         run: |
-          # O script Python agora encontrará os arquivos na pasta data/
+          # O script Python agora encontrará os arquivos na pasta release_staging/
           uv run python update.py
 
       - name: Check for changes (Timezone Strategy)
@@ -65,10 +65,10 @@ jobs:
           git push --delete origin "$TAG" || true
           sleep 5
 
-          # Cria o release e sobe TODOS os arquivos que estiverem na pasta data/
-          # O uso do 'data/*' é o que garante o espelhamento total.
+          # Cria o release e sobe TODOS os arquivos de release_staging/
+          # O uso do 'release_staging/*' garante o espelhamento total.
           gh release create "$TAG" \
-            data/* \
+            release_staging/* \
             --title "Dados ${{ steps.check_changes.outputs.date_br }}" \
             --notes "Atualização automática diária via Artifact-based workflow." \
             --latest
