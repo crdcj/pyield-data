@@ -44,25 +44,18 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.anbima.tpf_data(date=date, fetch_from_source=True)
+    df = yd.anbima.fetch_tpf(date=date)
     selected_cols = [
         "BondType",
         "ReferenceDate",
         "SelicCode",
         "IssueBaseDate",
         "MaturityDate",
-        "BDToMat",
-        "Duration",
-        "AvgMaturity",
-        "DV01",
-        "DV01USD",
         "Price",
         "BidRate",
         "AskRate",
         "IndicativeRate",
-        "DIRate",
     ]
-    selected_cols = [col for col in selected_cols if col in df.columns]
     return df.select(selected_cols)
 
 
