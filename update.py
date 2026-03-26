@@ -46,15 +46,15 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
     df = yd.anbima.fetch_tpf(date=date)
     selected_cols = [
-        "BondType",
-        "ReferenceDate",
-        "SelicCode",
-        "IssueBaseDate",
-        "MaturityDate",
-        "Price",
-        "BidRate",
-        "AskRate",
-        "IndicativeRate",
+        "data_referencia",
+        "titulo",
+        "codigo_selic",
+        "data_base",
+        "data_vencimento",
+        "pu",
+        "taxa_compra",
+        "taxa_venda",
+        "taxa_indicativa",
     ]
     return df.select(selected_cols)
 
@@ -118,7 +118,7 @@ DI1_CONFIG = DatasetConfig(
 TPF_CONFIG = DatasetConfig(
     parquet_path=TPF_PARQUET,
     fetch_function=get_tpf_on_date,
-    id_cols=["ReferenceDate", "BondType", "MaturityDate"],
+    id_cols=["data_referencia", "titulo", "data_vencimento"],
     dataset_name="TPF",
 )
 
