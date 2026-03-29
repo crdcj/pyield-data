@@ -13,7 +13,6 @@ BASE_DIR = Path(__file__).parent
 RELEASE_DATA_DIR = BASE_DIR / "release_staging"
 DI1_PARQUET = RELEASE_DATA_DIR / "b3_di.parquet"
 TPF_PARQUET = RELEASE_DATA_DIR / "anbima_tpf.parquet"
-PR_PARQUET = RELEASE_DATA_DIR / "b3_price_report.parquet"
 FUTURES_PARQUET = RELEASE_DATA_DIR / "b3_futures.parquet"
 
 logger = logging.getLogger(__name__)
@@ -123,13 +122,6 @@ TPF_CONFIG = DatasetConfig(
     dataset_name="TPF",
 )
 
-PR_CONFIG = DatasetConfig(
-    parquet_path=PR_PARQUET,
-    fetch_function=get_futures_on_date,
-    id_cols=["TradDt", "TckrSymb"],
-    dataset_name="B3 Price Report",
-)
-
 FUTURES_CONFIG = DatasetConfig(
     parquet_path=FUTURES_PARQUET,
     fetch_function=get_futures_on_date,
@@ -182,7 +174,6 @@ def main() -> None:
     try:
         update_dataset(target_date, DI1_CONFIG)
         update_dataset(target_date, TPF_CONFIG)
-        update_dataset(target_date, PR_CONFIG)
         update_dataset(target_date, FUTURES_CONFIG)
     except Exception as e:
         logger.error(f"Failed to update datasets: {e}")
