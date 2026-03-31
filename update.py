@@ -11,24 +11,11 @@ import pyield as yd
 # `release_staging/`, atualiza em memoria e depois publica novamente no release.
 BASE_DIR = Path(__file__).parent
 RELEASE_DATA_DIR = BASE_DIR / "release_staging"
-DI1_PARQUET = RELEASE_DATA_DIR / "b3_di.parquet"
 TPF_PARQUET = RELEASE_DATA_DIR / "anbima_tpf.parquet"
 FUTURES_PARQUET = RELEASE_DATA_DIR / "b3_futures.parquet"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
-
-def get_di1_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.futures(
-        date=date,
-        contract_code="DI1",
-        full_report=True,
-    )
-    if "taxa_ajuste" not in df.columns:
-        raise ValueError(f"taxa_ajuste column not found in DI1 data for {date}")
-
-    return df
 
 
 # Colunas do price report que o pyield de fato usa (ver _RENOMEAR_COLUNAS_PR).
@@ -131,13 +118,6 @@ def update_dataset(target_date: dt.date, config: DatasetConfig) -> None:
 
 
 # Configurações dos datasets
-DI1_CONFIG = DatasetConfig(
-    parquet_path=DI1_PARQUET,
-    fetch_function=get_di1_on_date,
-    id_cols=["data_referencia", "data_vencimento"],
-    dataset_name="DI1",
-)
-
 TPF_CONFIG = DatasetConfig(
     parquet_path=TPF_PARQUET,
     fetch_function=get_tpf_on_date,
@@ -195,7 +175,6 @@ def main() -> None:
         return
 
     try:
-        update_dataset(target_date, DI1_CONFIG)
         update_dataset(target_date, TPF_CONFIG)
         update_dataset(target_date, FUTURES_CONFIG)
     except Exception as e:
