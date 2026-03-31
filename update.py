@@ -31,6 +31,28 @@ def get_di1_on_date(date: dt.date) -> pl.DataFrame:
     return df
 
 
+# Colunas do price report que o pyield de fato usa (ver _RENOMEAR_COLUNAS_PR).
+FUTURES_COLS = [
+    "TradDt",
+    "TckrSymb",
+    "OpnIntrst",
+    "TradQty",
+    "FinInstrmQty",
+    "NtlFinVol",
+    "BestBidPric",
+    "BestAskPric",
+    "FrstPric",
+    "MinPric",
+    "MaxPric",
+    "TradAvrgPric",
+    "LastPric",
+    "AdjstdQt",
+    "AdjstdQtTax",
+    "MaxTradLmt",
+    "MinTradLmt",
+]
+
+
 def get_futures_on_date(date: dt.date) -> pl.DataFrame:
     df = yd.b3.fetch_price_report(
         date=date,
@@ -40,7 +62,8 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
     if df.is_empty():
         raise ValueError(f"No futures data available for {date}")
 
-    return df
+    cols = [c for c in FUTURES_COLS if c in df.columns]
+    return df.select(cols)
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
