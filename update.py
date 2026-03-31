@@ -25,8 +25,8 @@ def get_di1_on_date(date: dt.date) -> pl.DataFrame:
         contract_code="DI1",
         full_report=True,
     )
-    if "SettlementRate" not in df.columns:
-        raise ValueError(f"SettlementRate column not found in DI1 data for {date}")
+    if "taxa_ajuste" not in df.columns:
+        raise ValueError(f"taxa_ajuste column not found in DI1 data for {date}")
 
     return df
 
@@ -111,7 +111,7 @@ def update_dataset(target_date: dt.date, config: DatasetConfig) -> None:
 DI1_CONFIG = DatasetConfig(
     parquet_path=DI1_PARQUET,
     fetch_function=get_di1_on_date,
-    id_cols=["TradeDate", "ExpirationDate"],
+    id_cols=["data_referencia", "data_vencimento"],
     dataset_name="DI1",
 )
 
