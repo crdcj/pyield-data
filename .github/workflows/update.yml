@@ -2,11 +2,36 @@ name: Atualização DI e Anbima (Artifact-Based)
 
 on:
   schedule:
-    - cron: "30 01 * * 2-6" # 22:30 BRT
+    - cron: "00 22 * * 2-6" # 19:00 BRT (1ª tentativa)
+    - cron: "30 22 * * 2-6" # 19:30 BRT (2ª tentativa)
+    - cron: "30 23 * * 2-6" # 20:30 BRT (3ª tentativa)
+    - cron: "30 00 * * 3-7" # 21:30 BRT (4ª tentativa)
+    - cron: "30 01 * * 3-7" # 22:30 BRT (5ª tentativa)
   workflow_dispatch:
 
 jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Check if today's release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          export TZ="America/Sao_Paulo"
+          TAG="data-$(date +'%Y-%m-%d')"
+          if [[ "${{ github.event_name }}" == "schedule" ]] && gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "✅ Release $TAG already exists. Skipping."
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
   update-datasets:
+    needs: check-release
+    if: needs.check-release.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

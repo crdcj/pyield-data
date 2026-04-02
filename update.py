@@ -145,7 +145,7 @@ def determine_target_date() -> dt.date:
 
     if yd.bday.is_business_day(today):
         # É dia útil, então o horário importa
-        if now.hour < 20:
+        if now.hour < 19:
             target_date = yd.bday.offset(today, -1)
         else:
             target_date = today
