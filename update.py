@@ -1,5 +1,6 @@
 import datetime as dt
 import logging
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,23 +138,20 @@ def determine_target_date() -> dt.date:
     """
     Determina a data de referência para atualização dos dados.
 
-    Returns:
-        Data de referência apropriada baseada no dia e hora atuais
+    Antes das 18h BRT, retorna o dia útil anterior (permite rodar
+    manualmente durante o dia para pegar dados de ontem).
+    A partir das 18h, retorna hoje se dia útil.
+    Em fins de semana/feriados, retorna o último dia útil.
     """
     now = yd.now()
     today = now.date()
 
     if yd.bday.is_business_day(today):
-        # É dia útil, então o horário importa
-        if now.hour < 19:
-            target_date = yd.bday.offset(today, -1)
-        else:
-            target_date = today
-    else:
-        # Não é dia útil, então pegamos o último que existiu
-        target_date = yd.bday.last_business_day()
+        if now.hour < 18:
+            return yd.bday.offset(today, -1)
+        return today
 
-    return target_date
+    return yd.bday.last_business_day()
 
 
 def is_special_holiday(date: dt.date) -> bool:
@@ -164,7 +162,10 @@ def is_special_holiday(date: dt.date) -> bool:
 
 
 def main() -> None:
-    target_date = determine_target_date()
+    if len(sys.argv) > 1:
+        target_date = dt.date.fromisoformat(sys.argv[1])
+    else:
+        target_date = determine_target_date()
     logger.info(f"Determined target trade date: {target_date}")
 
     # Force a specific date for testing purposes

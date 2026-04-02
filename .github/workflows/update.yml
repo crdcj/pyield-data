@@ -10,28 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-release:
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-    steps:
-      - name: Check if today's release already exists
-        id: check
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          export TZ="America/Sao_Paulo"
-          TAG="data-$(date +'%Y-%m-%d')"
-          if [[ "${{ github.event_name }}" == "schedule" ]] && gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "✅ Release $TAG already exists. Skipping."
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          else
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          fi
-
   update-datasets:
-    needs: check-release
-    if: needs.check-release.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -51,38 +30,58 @@ jobs:
       - name: Install dependencies
         run: uv pip install -r requirements.txt
 
+      - name: Determine target date
+        id: target
+        run: |
+          result=$(uv run python -c '
+          from update import determine_target_date, is_special_holiday
+          target = determine_target_date()
+          should_run = not is_special_holiday(target)
+          fmt = "%d-%m-%Y"
+          print(f"{target.isoformat()}|{target.strftime(fmt)}|{str(should_run).lower()}")
+          ')
+          IFS='|' read -r TARGET_DATE DATE_BR SHOULD_RUN <<< "$result"
+          echo "target_date=$TARGET_DATE" >> $GITHUB_OUTPUT
+          echo "tag=data-$TARGET_DATE" >> $GITHUB_OUTPUT
+          echo "date_br=$DATE_BR" >> $GITHUB_OUTPUT
+          echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+          echo "📅 Target date: $TARGET_DATE (should_run=$SHOULD_RUN)"
+
+      - name: Check if release already exists
+        id: check
+        if: steps.target.outputs.should_run == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.target.outputs.tag }}"
+          if [[ "${{ github.event_name }}" == "schedule" ]] && gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "✅ Release $TAG already exists. Skipping."
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Download data from Latest Release
+        if: steps.check.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "📥 Baixando arquivos do último release..."
           mkdir -p release_staging
-          # Baixar todos os arquivos (assets) do release marcado como 'Latest'
           gh release download --pattern "*" --dir release_staging
-          
           echo "✅ Arquivos recuperados:"
           ls -R release_staging/
 
       - name: Run update script
-        run: |
-          # O script Python agora encontrará os arquivos na pasta release_staging/
-          uv run python update.py
+        if: steps.check.outputs.should_run == 'true'
+        run: uv run python update.py ${{ steps.target.outputs.target_date }}
 
-      - name: Check for changes (Timezone Strategy)
-        id: check_changes
-        run: |
-          export TZ="America/Sao_Paulo"
-          echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT          
-          echo "has_changes=true" >> $GITHUB_OUTPUT
-
-      # --- PASSO MODIFICADO: Publicar novo estado ---
       - name: Create New Release
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="data-${{ steps.check_changes.outputs.date_tag }}"
+          TAG="${{ steps.target.outputs.tag }}"
           
           # Limpeza de segurança para permitir re-execuções no mesmo dia
           gh release delete "$TAG" --yes || true
@@ -90,11 +89,9 @@ jobs:
           git push --delete origin "$TAG" || true
           sleep 5
 
-          # Cria o release e sobe TODOS os arquivos de release_staging/
-          # O uso do 'release_staging/*' garante o espelhamento total.
           gh release create "$TAG" \
             release_staging/* \
-            --title "Dados ${{ steps.check_changes.outputs.date_br }}" \
+            --title "Dados ${{ steps.target.outputs.date_br }}" \
             --notes "Atualização automática diária via Artifact-based workflow." \
             --latest
 
