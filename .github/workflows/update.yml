@@ -44,11 +44,10 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"
-          enable-cache: true
 
       - name: Create virtual environment
         run: uv venv
-
+    
       - name: Install dependencies
         run: uv pip install -r requirements.txt
 
@@ -67,7 +66,7 @@ jobs:
       - name: Run update script
         run: |
           # O script Python agora encontrará os arquivos na pasta release_staging/
-          python update.py
+          uv run python update.py
 
       - name: Check for changes (Timezone Strategy)
         id: check_changes
