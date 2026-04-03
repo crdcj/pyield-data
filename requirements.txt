@@ -1,5 +1,1 @@
-pandas
-pyarrow
-requests
 pyield
-polars

@@ -1,11 +1,12 @@
 import datetime as dt
 import logging
+from calendar import monthrange
 from decimal import Decimal, getcontext
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-import pandas as pd
+import polars as pl
 import pyield as yd
 import requests
 
@@ -36,45 +37,38 @@ logging.basicConfig(
 )
 
 
-def get_ipca_calendar() -> pd.DataFrame:
+def get_ipca_calendar() -> pl.DataFrame:
     """
     Fetch IPCA calendar data from IBGE API.
 
     Returns:
-        pd.DataFrame: DataFrame containing IPCA release dates
+        pl.DataFrame: DataFrame containing IPCA release dates
 
     Raises:
         requests.RequestException: If API request fails
     """
 
     try:
-        # Make request to the API
         response = requests.get(IBGE_CALENDAR_URL)
-        response.raise_for_status()  # Raise exception for HTTP errors
+        response.raise_for_status()
 
-        # Convert response to JSON
         calendario_completo = response.json()
 
         calendario_ipca = []
 
-        for i in range(len(calendario_completo["items"])):
-            # Verificando se o título ou a descrição contém "IPCA"
-            if (
-                calendario_completo["items"][i]["titulo"]
-                == "Índice Nacional de Preços ao Consumidor Amplo"
-            ):
+        for item in calendario_completo["items"]:
+            if item["titulo"] == "Índice Nacional de Preços ao Consumidor Amplo":
                 try:
-                    release_date = pd.to_datetime(
-                        calendario_completo["items"][i]["data_divulgacao"],
-                        format="%d/%m/%Y %H:%M:%S",
+                    release_date = dt.datetime.strptime(
+                        item["data_divulgacao"],
+                        "%d/%m/%Y %H:%M:%S",
                     ).date()
                     calendario_ipca.append(release_date)
-                except (ValueError, pd.errors.OutOfBoundsDatetime) as e:
+                except ValueError as e:
                     logger.warning(f"Invalid date format: {e}")
 
         calendario_ipca.sort()
-        df_calendario = pd.DataFrame({"data_divulgacao": calendario_ipca})
-        return df_calendario
+        return pl.DataFrame({"data_divulgacao": calendario_ipca})
 
     except requests.RequestException as e:
         logger.error(f"Error fetching IPCA calendar: {e}")
@@ -92,9 +86,15 @@ def get_ipca_data(months_back: int = 4) -> Optional[float]:
         float: IPCA value as percentage or None if error occurs
     """
     try:
-        today = pd.Timestamp.today().date()
+        today = dt.date.today()
         end_date = today.strftime("%d-%m-%Y")
-        start_date = (today - pd.DateOffset(months=months_back)).strftime("%d-%m-%Y")
+
+        year, month = today.year, today.month - months_back
+        while month <= 0:
+            month += 12
+            year -= 1
+        day = min(today.day, monthrange(year, month)[1])
+        start_date = dt.date(year, month, day).strftime("%d-%m-%Y")
 
         df_ipca = yd.ipca.indexes(start_date, end_date)
 
@@ -102,7 +102,7 @@ def get_ipca_data(months_back: int = 4) -> Optional[float]:
             logger.warning("Not enough IPCA data points available")
             return None
 
-        ipca_value = (df_ipca["Value"].iloc[-1] / df_ipca["Value"].iloc[-2]) - 1
+        ipca_value = (df_ipca["Value"][-1] / df_ipca["Value"][-2]) - 1
         ipca_value = float(ipca_value) * 100
         return ipca_value
 
@@ -111,7 +111,7 @@ def get_ipca_data(months_back: int = 4) -> Optional[float]:
         return None
 
 
-def get_current_month_release_date(df_calendario: pd.DataFrame) -> Optional[dt.date]:
+def get_current_month_release_date(df_calendario: pl.DataFrame) -> Optional[dt.date]:
     """
     Find the current month's IPCA release date.
 
@@ -121,22 +121,18 @@ def get_current_month_release_date(df_calendario: pd.DataFrame) -> Optional[dt.d
     Returns:
         dt.date: Current month's release date or None if not found
     """
-    today = pd.Timestamp.today().date()
-    current_month = today.month
-    current_year = today.year
+    today = dt.date.today()
 
-    # Find the most recent IPCA release date
-    ipca_release_dates = pd.to_datetime(df_calendario["data_divulgacao"])
-    current_month_release = ipca_release_dates[
-        (ipca_release_dates.dt.month == current_month)
-        & (ipca_release_dates.dt.year == current_year)
-    ]
+    current_month_release = df_calendario.filter(
+        pl.col("data_divulgacao").dt.month() == today.month,
+        pl.col("data_divulgacao").dt.year() == today.year,
+    )
 
-    if len(current_month_release) == 0:
-        logger.warning(f"No IPCA release date found for {current_month}/{current_year}")
+    if current_month_release.is_empty():
+        logger.warning(f"No IPCA release date found for {today.month}/{today.year}")
         return None
 
-    return current_month_release.iloc[0].date()
+    return current_month_release["data_divulgacao"][0]
 
 
 def get_previous_15th(date):
@@ -160,33 +156,36 @@ def get_previous_15th(date):
 
 
 def update_vna_dataframe(
-    df_vna_base: pd.DataFrame,
-    df_vna: pd.DataFrame,
-    df_calendario: pd.DataFrame,
-) -> pd.DataFrame:
+    df_vna_base: pl.DataFrame,
+    df_vna: pl.DataFrame,
+    df_calendario: pl.DataFrame,
+) -> pl.DataFrame:
     """
     Update vna dataframe.
 
     Args:
+        df_vna_base: Base VNA dataframe
         df_vna: Existing vna dataframe
         df_calendario: IPCA calendar dataframe
 
     Returns:
-        pd.DataFrame: Updated vna dataframe
+        pl.DataFrame: Updated vna dataframe
     """
-    today = pd.Timestamp.today().date()
+    today = dt.date.today()
 
     # Get the last date in the dataframe
-    last_date_in_df = pd.Timestamp(df_vna["reference_date"].max()).date()
+    last_date_raw = df_vna["reference_date"].max()
+    if not isinstance(last_date_raw, dt.date):
+        logger.warning("Empty VNA dataframe")
+        return df_vna
+    last_date_in_df = last_date_raw
 
     # Ensure last_date_in_df is before today
     if last_date_in_df >= today:
         logger.info(f"Data already up to date until {last_date_in_df}")
         return df_vna
 
-    business_days = yd.bday.generate(
-        last_date_in_df, today, inclusive="right"
-    ).to_list()
+    business_days = yd.bday.generate(last_date_in_df, today, closed="right").to_list()
 
     if len(business_days) == 0:
         logger.info("No new business days to add")
@@ -196,7 +195,7 @@ def update_vna_dataframe(
     current_month_release_date = get_current_month_release_date(df_calendario)
 
     # Get the ANBIMA projection
-    anbima_value = yd.ipca.projected_rate().projected_value
+    anbima_value = yd.ipca.projected_rate().valor_projetado
     anbima_value = float(Decimal(f"{anbima_value}") * Decimal("100.00"))
     logger.info(f"ANBIMA projection: {anbima_value:.2f}%")
 
@@ -235,14 +234,22 @@ def update_vna_dataframe(
             # Fallback to IPCA if ANBIMA is not available
             inflation_value = ipca_value
 
+        if inflation_value is None:
+            logger.warning(f"No inflation value available for {date}, skipping")
+            continue
+
         # Update vna. First get the last vna in the last 15th
         vna_base_date = get_previous_15th(date).date()
-        vna_base = df_vna_base.query(f'reference_date == "{vna_base_date}"')[
-            "vna"
-        ].values[0]
+        vna_base = df_vna_base.filter(pl.col("reference_date") == vna_base_date)["vna"][
+            0
+        ]
 
-        next_vna_base_date = vna_base_date + pd.DateOffset(months=1)
-        next_vna_base_date = next_vna_base_date.replace(day=15).date()
+        if vna_base_date.month == 12:
+            next_vna_base_date = dt.date(vna_base_date.year + 1, 1, 15)
+        else:
+            next_vna_base_date = dt.date(
+                vna_base_date.year, vna_base_date.month + 1, 15
+            )
 
         du_rf = yd.bday.count(vna_base_date, date)
         du_m = yd.bday.count(vna_base_date, next_vna_base_date)
@@ -265,24 +272,17 @@ def update_vna_dataframe(
             }
         )
 
-    # Create a dataframe from the new rows
-    new_data = pd.DataFrame(new_rows)
-
-    if new_data.empty:
+    if not new_rows:
         logger.info("No new data to add")
         return df_vna
 
-    # Concatenate with the original dataframe
-    updated_df = pd.concat([df_vna, new_data], ignore_index=True)
+    new_data = pl.DataFrame(new_rows)
 
-    # Remove any duplicates based on reference_date
-    updated_df = updated_df.drop_duplicates(subset=["reference_date"], keep="last")
-
-    # Ensure reference_date is datetime
-    updated_df["reference_date"] = pd.to_datetime(updated_df["reference_date"])
-
-    # Sort by reference_date
-    updated_df = updated_df.sort_values("reference_date").reset_index(drop=True)
+    updated_df = (
+        pl.concat([df_vna, new_data], how="diagonal_relaxed")
+        .unique(subset=["reference_date"], keep="last")
+        .sort("reference_date")
+    )
 
     logger.info(f"Added {len(new_data)} new data points")
     return updated_df
@@ -301,7 +301,7 @@ def is_pre_holiday(date: dt.date) -> bool:
 
 
 def main():
-    today = pd.Timestamp.today().date()
+    today = dt.date.today()
 
     # Check if today is a business day
     if not is_business_day(today):
@@ -321,10 +321,9 @@ def main():
 
         # Load existing vna data
         try:
-            df_vna_base = pd.read_csv(VNA_BASE_CSV)
-            df_vna = pd.read_parquet(VNA_PARQUET)
-            df_vna_base["reference_date"] = pd.to_datetime(
-                df_vna_base["reference_date"]
+            df_vna_base = pl.read_csv(VNA_BASE_CSV, try_parse_dates=True)
+            df_vna = pl.read_parquet(VNA_PARQUET).with_columns(
+                pl.col("reference_date").cast(pl.Date)
             )
             logger.info(f"Loaded existing data with {len(df_vna)} entries")
 
@@ -332,14 +331,10 @@ def main():
             df_vna_updated = update_vna_dataframe(df_vna_base, df_vna, df_calendar)
 
             # Save the updated dataframe to parquet
-            df_vna_updated.to_parquet(
-                VNA_PARQUET,
-                compression="gzip",
-                index=False,
-            )
+            df_vna_updated.write_parquet(VNA_PARQUET)
             logger.info(f"Updated data saved with {len(df_vna_updated)} entries")
 
-        except (FileNotFoundError, pd.errors.EmptyDataError):
+        except FileNotFoundError:
             logger.info("No existing data found")
 
     except Exception as e:

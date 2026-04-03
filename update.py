@@ -42,9 +42,10 @@ FUTURES_COLS = [
 
 
 def get_futures_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.b3.fetch_price_report(
+    df = yd.b3.price_report_fetch(
         date=date,
-        contract_code=["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"],
+        ticker_prefix=["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"],
+        ticker_length=6,
         full_report=True,
     )
     if df.is_empty():
