@@ -42,11 +42,11 @@ FUTURES_COLS = [
 
 
 def get_futures_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.b3.price_report_fetch(
-        date=date,
-        ticker_prefix=["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"],
-        ticker_length=6,
-        full_report=True,
+    df = yd.b3.boletim_negociacao(
+        data=date,
+        prefixo_ticker=["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"],
+        comprimento_ticker=6,
+        boletim_completo=True,
     )
     if df.is_empty():
         raise ValueError(f"No futures data available for {date}")
@@ -56,7 +56,7 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.anbima.fetch_tpf(date=date)
+    df = yd.anbima.tpf_fonte(data=date)
     selected_cols = [
         "data_referencia",
         "titulo",
@@ -144,15 +144,15 @@ def determine_target_date() -> dt.date:
     A partir das 18h, retorna hoje se dia útil.
     Em fins de semana/feriados, retorna o último dia útil.
     """
-    now = yd.now()
+    now = yd.agora()
     today = now.date()
 
-    if yd.bday.is_business_day(today):
+    if yd.du.e_dia_util(today):
         if now.hour < 18:
-            return yd.bday.offset(today, -1)
+            return yd.du.deslocar(today, -1)
         return today
 
-    return yd.bday.last_business_day()
+    return yd.du.ultimo_dia_util()
 
 
 def is_special_holiday(date: dt.date) -> bool:

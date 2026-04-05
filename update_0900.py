@@ -96,7 +96,7 @@ def get_ipca_data(months_back: int = 4) -> Optional[float]:
         day = min(today.day, monthrange(year, month)[1])
         start_date = dt.date(year, month, day).strftime("%d-%m-%Y")
 
-        df_ipca = yd.ipca.indexes(start_date, end_date)
+        df_ipca = yd.ipca.indices(start_date, end_date)
 
         if len(df_ipca) < 2:
             logger.warning("Not enough IPCA data points available")
@@ -185,7 +185,7 @@ def update_vna_dataframe(
         logger.info(f"Data already up to date until {last_date_in_df}")
         return df_vna
 
-    business_days = yd.bday.generate(last_date_in_df, today, closed="right").to_list()
+    business_days = yd.du.gerar(last_date_in_df, today, fechamento="right").to_list()
 
     if len(business_days) == 0:
         logger.info("No new business days to add")
@@ -195,7 +195,7 @@ def update_vna_dataframe(
     current_month_release_date = get_current_month_release_date(df_calendario)
 
     # Get the ANBIMA projection
-    anbima_value = yd.ipca.projected_rate().valor_projetado
+    anbima_value = yd.ipca.taxa_projetada().valor_projetado
     anbima_value = float(Decimal(f"{anbima_value}") * Decimal("100.00"))
     logger.info(f"ANBIMA projection: {anbima_value:.2f}%")
 
@@ -251,8 +251,8 @@ def update_vna_dataframe(
                 vna_base_date.year, vna_base_date.month + 1, 15
             )
 
-        du_rf = yd.bday.count(vna_base_date, date)
-        du_m = yd.bday.count(vna_base_date, next_vna_base_date)
+        du_rf = yd.du.contar(vna_base_date, date)
+        du_m = yd.du.contar(vna_base_date, next_vna_base_date)
 
         vna_du = vna_base * (1 + inflation_value / 100) ** (du_rf / du_m)
         vna_du = int(vna_du * 1000000) / 1000000
@@ -290,7 +290,7 @@ def update_vna_dataframe(
 
 def is_business_day(date: dt.date) -> bool:
     """Check if the given date is a business day."""
-    return yd.bday.offset(date, 0) == date
+    return yd.du.deslocar(date, 0) == date
 
 
 def is_pre_holiday(date: dt.date) -> bool:
