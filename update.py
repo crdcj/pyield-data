@@ -168,7 +168,7 @@ def dataset_has_date(config: DatasetConfig, target_date: dt.date) -> bool:
         return False
     df = pl.read_parquet(config.parquet_path, columns=config.id_cols[:1])
     date_col = config.id_cols[0]
-    return df.filter(pl.col(date_col) == target_date.isoformat()).height > 0
+    return df.filter(pl.col(date_col) == target_date).height > 0
 
 
 def main() -> None:
