@@ -47,53 +47,38 @@ jobs:
           echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
           echo "📅 Target date: $TARGET_DATE (should_run=$SHOULD_RUN)"
 
-      - name: Check if release already exists
-        id: check
-        if: steps.target.outputs.should_run == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ steps.target.outputs.tag }}"
-          if [[ "${{ github.event_name }}" == "schedule" ]] && gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "✅ Release $TAG already exists. Skipping."
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          else
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          fi
-
       - name: Download data from Latest Release
-        if: steps.check.outputs.should_run == 'true'
+        if: steps.target.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "📥 Baixando arquivos do último release..."
           mkdir -p release_staging
-          gh release download --pattern "*" --dir release_staging
-          echo "✅ Arquivos recuperados:"
+          gh release download --pattern "*" --dir release_staging || echo "⚠️ Nenhum release encontrado."
           ls -R release_staging/
 
       - name: Run update script
-        if: steps.check.outputs.should_run == 'true'
+        if: steps.target.outputs.should_run == 'true'
         run: uv run python update.py ${{ steps.target.outputs.target_date }}
 
-      - name: Create New Release
-        if: steps.check.outputs.should_run == 'true'
+      - name: Create or Update Release
+        if: steps.target.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.target.outputs.tag }}"
           
-          # Limpeza de segurança para permitir re-execuções no mesmo dia
-          gh release delete "$TAG" --yes || true
-          git tag -d "$TAG" || true
-          git push --delete origin "$TAG" || true
-          sleep 5
-
-          gh release create "$TAG" \
-            release_staging/* \
-            --title "Dados ${{ steps.target.outputs.date_br }}" \
-            --notes "Atualização automática diária via Artifact-based workflow." \
-            --latest
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "📦 Release $TAG existe, atualizando assets..."
+            gh release upload "$TAG" release_staging/* --clobber
+          else
+            echo "🚀 Criando release $TAG..."
+            gh release create "$TAG" \
+              release_staging/* \
+              --title "Dados ${{ steps.target.outputs.date_br }}" \
+              --notes "Atualização automática diária via Artifact-based workflow." \
+              --latest
+          fi
 
       - name: Delete old releases (Keep last 30)
         continue-on-error: true
