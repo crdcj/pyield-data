@@ -48,7 +48,11 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
         comprimento_ticker=6,
         boletim_completo=True,
     )
+    logger.info(f"B3 boletim_negociacao({date}): shape={df.shape}, cols={df.columns}")
     if df.is_empty():
+        # Tentar sem filtro pra ver se o problema é no filtro ou na fonte
+        df_raw = yd.b3.boletim_negociacao(data=date, boletim_completo=True)
+        logger.info(f"B3 sem filtro: shape={df_raw.shape}")
         raise ValueError(f"No futures data available for {date}")
 
     cols = [c for c in FUTURES_COLS if c in df.columns]
