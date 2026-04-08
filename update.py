@@ -162,6 +162,15 @@ def is_special_holiday(date: dt.date) -> bool:
     return date in (pre_xmas, pre_ny)
 
 
+def dataset_has_date(config: DatasetConfig, target_date: dt.date) -> bool:
+    """Checa se o parquet já contém dados para a target_date."""
+    if not config.parquet_path.exists():
+        return False
+    df = pl.read_parquet(config.parquet_path, columns=config.id_cols[:1])
+    date_col = config.id_cols[0]
+    return df.filter(pl.col(date_col) == target_date.isoformat()).height > 0
+
+
 def main() -> None:
     if len(sys.argv) > 1:
         target_date = dt.date.fromisoformat(sys.argv[1])
@@ -169,19 +178,28 @@ def main() -> None:
         target_date = determine_target_date()
     logger.info(f"Determined target trade date: {target_date}")
 
-    # Force a specific date for testing purposes
-    # target_date = dt.date(2025, 12, 23)
-
     if is_special_holiday(target_date):
         logger.info("No trade updates on Christmas Eve or New Year's Eve.")
         return
 
-    try:
-        update_dataset(target_date, TPF_CONFIG)
-        update_dataset(target_date, FUTURES_CONFIG)
-    except Exception as e:
-        logger.error(f"Failed to update datasets: {e}")
-        raise
+    all_configs = [TPF_CONFIG, FUTURES_CONFIG]
+    pending = [c for c in all_configs if not dataset_has_date(c, target_date)]
+
+    if not pending:
+        logger.info("All datasets already up to date.")
+        return
+
+    failed = []
+    for config in pending:
+        try:
+            update_dataset(target_date, config)
+        except Exception as e:
+            logger.error(f"Failed to update {config.dataset_name}: {e}")
+            failed.append(config)
+
+    if failed:
+        names = ", ".join(c.dataset_name for c in failed)
+        raise RuntimeError(f"Failed to update: {names}")
 
 
 if __name__ == "__main__":
