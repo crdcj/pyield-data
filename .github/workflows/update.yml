@@ -2,8 +2,8 @@ name: Atualização DI e Anbima (Artifact-Based)
 
 on:
   schedule:
-    - cron: "00 23 * * 1-5" # 20:00 BRT (1ª tentativa)
-    - cron: "30 02 * * 2-6" # 23:00 BRT (2ª tentativa)
+    - cron: "30 23 * * 1-5" # 20:30 BRT (1ª tentativa)
+    - cron: "30 02 * * 2-6" # 23:30 BRT (2ª tentativa)
   workflow_dispatch:
 
 jobs:

@@ -149,27 +149,32 @@ def main() -> None:
         target_date = determine_target_date()
     logger.info(f"Determined target trade date: {target_date}")
 
-    if is_special_holiday(target_date):
+    prev_date = yd.du.deslocar(target_date, -1)
+    dates_to_process = [
+        d for d in [prev_date, target_date] if not is_special_holiday(d)
+    ]
+
+    if not dates_to_process:
         logger.info("No trade updates on Christmas Eve or New Year's Eve.")
         return
 
     all_configs = [TPF_CONFIG, FUTURES_CONFIG]
-    pending = [c for c in all_configs if not dataset_has_date(c, target_date)]
-
-    if not pending:
-        logger.info("All datasets already up to date.")
-        return
 
     failed = []
-    for config in pending:
-        try:
-            upsert_dataset(target_date, config)
-        except Exception as e:
-            logger.error(f"Failed to update {config.dataset_name}: {e}")
-            failed.append(config)
+    for date in dates_to_process:
+        pending = [c for c in all_configs if not dataset_has_date(c, date)]
+        if not pending:
+            logger.info(f"All datasets already up to date for {date}.")
+            continue
+        for config in pending:
+            try:
+                upsert_dataset(date, config)
+            except Exception as e:
+                logger.error(f"Failed to update {config.dataset_name} for {date}: {e}")
+                failed.append((date, config))
 
     if failed:
-        names = ", ".join(c.dataset_name for c in failed)
+        names = ", ".join(f"{c.dataset_name}@{d}" for d, c in failed)
         raise RuntimeError(f"Failed to update: {names}")
 
 
