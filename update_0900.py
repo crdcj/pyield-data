@@ -4,7 +4,6 @@ from calendar import monthrange
 from decimal import Decimal, getcontext
 from pathlib import Path
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 import polars as pl
 import pyield as yd
@@ -14,7 +13,7 @@ import requests
 getcontext().prec = 28
 
 # Configurations and constants
-BZ_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+
 IBGE_CALENDAR_URL = "https://servicodados.ibge.gov.br/api/v3/calendario/"
 
 # Local workflow staging folder (downloaded from/reuploaded to release assets)

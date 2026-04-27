@@ -7,6 +7,7 @@ from pathlib import Path
 
 import polars as pl
 import pyield as yd
+from pyield.b3.boletim import boletim_negociacao
 
 # Artefatos locais do workflow: o job baixa do latest release para
 # `release_staging/`, atualiza em memoria e depois publica novamente no release.
@@ -19,30 +20,8 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-# Colunas do price report que o pyield de fato usa (ver _RENOMEAR_COLUNAS_PR).
-FUTURES_COLS = [
-    "TradDt",
-    "TckrSymb",
-    "OpnIntrst",
-    "TradQty",
-    "FinInstrmQty",
-    "NtlFinVol",
-    "BestBidPric",
-    "BestAskPric",
-    "FrstPric",
-    "MinPric",
-    "MaxPric",
-    "TradAvrgPric",
-    "LastPric",
-    "AdjstdQt",
-    "AdjstdQtTax",
-    "MaxTradLmt",
-    "MinTradLmt",
-]
-
-
 def get_futures_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.b3.boletim_negociacao(
+    df = boletim_negociacao(
         data=date,
         prefixo_ticker=["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"],
         comprimento_ticker=6,
@@ -51,28 +30,15 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
     logger.info(f"B3 boletim_negociacao({date}): shape={df.shape}, cols={df.columns}")
     if df.is_empty():
         # Tentar sem filtro pra ver se o problema é no filtro ou na fonte
-        df_raw = yd.b3.boletim_negociacao(data=date, boletim_completo=True)
+        df_raw = boletim_negociacao(data=date, boletim_completo=True)
         logger.info(f"B3 sem filtro: shape={df_raw.shape}")
         raise ValueError(f"No futures data available for {date}")
 
-    cols = [c for c in FUTURES_COLS if c in df.columns]
-    return df.select(cols)
+    return df
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.anbima.tpf_fonte(data=date)
-    selected_cols = [
-        "data_referencia",
-        "titulo",
-        "codigo_selic",
-        "data_base",
-        "data_vencimento",
-        "pu",
-        "taxa_compra",
-        "taxa_venda",
-        "taxa_indicativa",
-    ]
-    return df.select(selected_cols)
+    return yd.tpf.taxas(data=date, completo=True)
 
 
 @dataclass
@@ -85,7 +51,7 @@ class DatasetConfig:
     dataset_name: str
 
 
-def update_dataset(target_date: dt.date, config: DatasetConfig) -> None:
+def upsert_dataset(target_date: dt.date, config: DatasetConfig) -> None:
     """
     Atualiza um dataset parquet com novos dados.
 
@@ -113,8 +79,9 @@ def update_dataset(target_date: dt.date, config: DatasetConfig) -> None:
     if df_new.is_empty():
         raise ValueError(f"No {config.dataset_name} data available for {target_date}")
 
+    cols = [c for c in df_new.columns if c in df.columns]
     (
-        pl.concat([df, df_new], how="diagonal_relaxed")
+        pl.concat([df, df_new.select(cols)], how="vertical_relaxed")
         .unique(subset=config.id_cols, keep="last")
         .sort(config.id_cols)
         .write_parquet(config.parquet_path)
@@ -151,7 +118,7 @@ def determine_target_date() -> dt.date:
     now = yd.agora()
     today = now.date()
 
-    if yd.du.e_dia_util(today):
+    if yd.du.eh_dia_util(today):
         if now.hour < 18:
             return yd.du.deslocar(today, -1)
         return today
@@ -196,7 +163,7 @@ def main() -> None:
     failed = []
     for config in pending:
         try:
-            update_dataset(target_date, config)
+            upsert_dataset(target_date, config)
         except Exception as e:
             logger.error(f"Failed to update {config.dataset_name}: {e}")
             failed.append(config)
