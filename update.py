@@ -27,7 +27,7 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
         comprimento_ticker=6,
         boletim_completo=True,
     )
-    logger.info(f"B3 boletim_negociacao({date}): shape={df.shape}, cols={df.columns}")
+    logger.info(f"B3 boletim_negociacao({date}): shape={df.shape}")
     if df.is_empty():
         # Tentar sem filtro pra ver se o problema é no filtro ou na fonte
         df_raw = boletim_negociacao(data=date, boletim_completo=True)
