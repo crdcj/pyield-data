@@ -79,7 +79,7 @@ def upsert_dataset(target_date: dt.date, config: DatasetConfig) -> None:
     if df_new.is_empty():
         raise ValueError(f"No {config.dataset_name} data available for {target_date}")
 
-    cols = [c for c in df_new.columns if c in df.columns]
+    cols = [c for c in df.columns if c in df_new.columns]
     (
         pl.concat([df, df_new.select(cols)], how="vertical_relaxed")
         .unique(subset=config.id_cols, keep="last")
@@ -149,9 +149,11 @@ def main() -> None:
         target_date = determine_target_date()
     logger.info(f"Determined target trade date: {target_date}")
 
-    prev_date = yd.du.deslocar(target_date, -1)
+    start_date = yd.du.deslocar(target_date, -4)
     dates_to_process = [
-        d for d in [prev_date, target_date] if not is_special_holiday(d)
+        d
+        for d in yd.du.gerar(start_date, target_date).to_list()
+        if not is_special_holiday(d)
     ]
 
     if not dates_to_process:
