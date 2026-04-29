@@ -32,7 +32,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p release_staging
-          gh release download --latest --pattern "*.parquet" --dir release_staging
+          gh release download --pattern "*.parquet" --dir release_staging
 
       - name: Run update script
         run: uv run python update.py

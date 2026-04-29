@@ -1,4 +1,4 @@
-name: Atualização Projeção Inflação (Artifact-Based)
+name: Atualização Projeção Inflação
 
 on:
   schedule:
@@ -9,12 +9,12 @@ jobs:
   update-datasets:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Essencial para baixar e criar releases
+      contents: write
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-      
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -22,65 +22,37 @@ jobs:
 
       - name: Create virtual environment
         run: uv venv
-    
+
       - name: Install dependencies
         run: uv pip install -r requirements.txt
-
-      - name: Install required locales
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y locales
-          sudo locale-gen pt_BR.UTF-8
-          sudo update-locale
 
       - name: Download data from Latest Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "📥 Baixando arquivos do último release para atualização..."
           mkdir -p release_staging
-          # Baixa tudo o que estiver no release atual para release_staging/
-          gh release download --pattern "*" --dir release_staging || echo "⚠️ Nenhum release encontrado."
-          ls -R release_staging/
+          gh release download --pattern "*.parquet" --pattern "*.csv" --dir release_staging
 
       - name: Run update script
         run: uv run python update_0900.py
 
-      - name: Set Date Tags
-        id: dates
-        run: |
-          export TZ="America/Sao_Paulo"
-          echo "date_tag=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-          echo "date_br=$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
-
-      - name: Create/Update Release
+      - name: Publish Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="data-${{ steps.dates.outputs.date_tag }}"
-          
-          # Se o Job de madrugada já criou o release de hoje, 
-          # o comando abaixo apenas atualiza os arquivos (faz o upload por cima).
-          # Se não existir, ele cria um novo.
-          
-          echo "🚀 Atualizando release $TAG com novos dados de inflação..."
-          
-          # O comando 'gh release create' com files e sem 'delete' 
-          # pode falhar se a tag já existir, então usamos 'upload' se existir
+          TAG="data-$(TZ=America/Sao_Paulo date +%Y-%m-%d)"
+          DATE_BR=$(TZ=America/Sao_Paulo date +%d-%m-%Y)
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release_staging/* --clobber
           else
-            gh release create "$TAG" release_staging/* \
-              --title "Dados ${{ steps.dates.outputs.date_br }}" \
-              --notes "Atualização automática de inflação e datasets." \
-              --latest
+            gh release create "$TAG" release_staging/* --title "Dados $DATE_BR" --notes "Atualização automática diária." --latest
           fi
 
-      - name: Delete old releases (Keep last 30)
+      - name: Delete old releases (keep last 30)
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release list --limit 100 --json tagName --jq '.[] | .tagName' | \
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | \
           tail -n +31 | \
           xargs -I {} gh release delete {} --yes
