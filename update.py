@@ -1,6 +1,7 @@
 import datetime as dt
 import logging
-import sys
+import time
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,26 +16,36 @@ BASE_DIR = Path(__file__).parent
 RELEASE_DATA_DIR = BASE_DIR / "release_staging"
 TPF_PARQUET = RELEASE_DATA_DIR / "anbima_tpf.parquet"
 FUTURES_PARQUET = RELEASE_DATA_DIR / "b3_futures.parquet"
+FUTURES_TICKERS = ["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"]
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
 def get_futures_on_date(date: dt.date) -> pl.DataFrame:
-    df = boletim_negociacao(
-        data=date,
-        prefixo_ticker=["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"],
-        comprimento_ticker=6,
-        boletim_completo=True,
-    )
-    logger.info(f"B3 boletim_negociacao({date}): shape={df.shape}")
-    if df.is_empty():
-        # Tentar sem filtro pra ver se o problema é no filtro ou na fonte
-        df_raw = boletim_negociacao(data=date, boletim_completo=True)
-        logger.info(f"B3 sem filtro: shape={df_raw.shape}")
-        raise ValueError(f"No futures data available for {date}")
-
-    return df
+    for attempt in range(3):
+        try:
+            df = boletim_negociacao(
+                data=date,
+                prefixo_ticker=FUTURES_TICKERS,
+                comprimento_ticker=6,
+                boletim_completo=True,
+            )
+            logger.info(f"B3 boletim_negociacao({date}): shape={df.shape}")
+            if df.is_empty():
+                # Tentar sem filtro pra ver se o problema é no filtro ou na fonte
+                df_raw = boletim_negociacao(data=date, boletim_completo=True)
+                logger.info(f"B3 sem filtro: shape={df_raw.shape}")
+                raise ValueError(f"No futures data available for {date}")
+            return df
+        except zipfile.BadZipFile:
+            if attempt == 2:
+                raise
+            logger.warning(
+                f"B3 BadZipFile on attempt {attempt + 1}, retrying in 30s..."
+            )
+            time.sleep(30)
+    raise RuntimeError("unreachable")
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
@@ -118,12 +129,11 @@ def determine_target_date() -> dt.date:
     now = yd.agora()
     today = now.date()
 
-    if yd.du.eh_dia_util(today):
-        if now.hour < 18:
-            return yd.du.deslocar(today, -1)
-        return today
-
-    return yd.du.ultimo_dia_util()
+    if not yd.du.eh_dia_util(today):
+        return yd.du.ultimo_dia_util()
+    if now.hour < 18:
+        return yd.du.deslocar(today, -1)
+    return today
 
 
 def is_special_holiday(date: dt.date) -> bool:
@@ -143,16 +153,13 @@ def dataset_has_date(config: DatasetConfig, target_date: dt.date) -> bool:
 
 
 def main() -> None:
-    if len(sys.argv) > 1:
-        target_date = dt.date.fromisoformat(sys.argv[1])
-    else:
-        target_date = determine_target_date()
+    target_date = determine_target_date()
     logger.info(f"Determined target trade date: {target_date}")
 
     start_date = yd.du.deslocar(target_date, -4)
     dates_to_process = [
         d
-        for d in yd.du.gerar(start_date, target_date).to_list()
+        for d in reversed(yd.du.gerar(start_date, target_date).to_list())
         if not is_special_holiday(d)
     ]
 
