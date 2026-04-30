@@ -22,6 +22,16 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+@dataclass
+class DatasetConfig:
+    """Configuração para atualização de dataset."""
+
+    parquet_path: Path
+    fetch_function: Callable[[dt.date], pl.DataFrame]
+    id_cols: list[str]
+    dataset_name: str
+
+
 def get_futures_on_date(date: dt.date) -> pl.DataFrame:
     for attempt in range(3):
         try:
@@ -50,55 +60,6 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
     return yd.tpf.taxas(data=date, completo=True)
-
-
-@dataclass
-class DatasetConfig:
-    """Configuração para atualização de dataset."""
-
-    parquet_path: Path
-    fetch_function: Callable[[dt.date], pl.DataFrame]
-    id_cols: list[str]
-    dataset_name: str
-
-
-def upsert_dataset(target_date: dt.date, config: DatasetConfig) -> None:
-    """
-    Atualiza um dataset parquet com novos dados.
-
-    O processamento ocorre em memoria (`df` e `df_new`). O unico estado persistido
-    e o arquivo parquet em `release_staging/`, que o workflow publica como
-    asset do release.
-
-    Args:
-        target_date: Data dos dados a serem buscados
-        config: Configuração do dataset a ser atualizado
-
-    Raises:
-        ValueError: Se não houver dados disponíveis para a data especificada
-    """
-    if not config.parquet_path.exists():
-        raise FileNotFoundError(
-            f"Missing base dataset for {config.dataset_name}: {config.parquet_path}. "
-            "Refusing to recreate from scratch to avoid release history reset."
-        )
-
-    df = pl.read_parquet(config.parquet_path)
-
-    df_new = config.fetch_function(target_date)
-
-    if df_new.is_empty():
-        raise ValueError(f"No {config.dataset_name} data available for {target_date}")
-
-    cols = [c for c in df.columns if c in df_new.columns]
-    (
-        pl.concat([df, df_new.select(cols)], how="vertical_relaxed")
-        .unique(subset=config.id_cols, keep="last")
-        .sort(config.id_cols)
-        .write_parquet(config.parquet_path)
-    )
-
-    logger.info(f"{config.dataset_name} dataset updated with data from {target_date}")
 
 
 # Configurações dos datasets
@@ -143,6 +104,18 @@ def is_special_holiday(date: dt.date) -> bool:
     return date in (pre_xmas, pre_ny)
 
 
+def dates_to_update() -> list[dt.date]:
+    """Retorna dias úteis a processar, do mais recente ao mais antigo."""
+    last_date = determine_target_date()
+    logger.info(f"Last trade date to update: {last_date}")
+    start_date = yd.du.deslocar(last_date, -4)
+    return [
+        d
+        for d in reversed(yd.du.gerar(start_date, last_date).to_list())
+        if not is_special_holiday(d)
+    ]
+
+
 def dataset_has_date(config: DatasetConfig, target_date: dt.date) -> bool:
     """Checa se o parquet já contém dados para a target_date."""
     if not config.parquet_path.exists():
@@ -152,34 +125,60 @@ def dataset_has_date(config: DatasetConfig, target_date: dt.date) -> bool:
     return df.filter(pl.col(date_col) == target_date).height > 0
 
 
+def upsert_dataset(target_date: dt.date, config: DatasetConfig) -> bool | None:
+    """
+    Atualiza um dataset parquet com novos dados.
+
+    Returns:
+        True: dataset atualizado com sucesso.
+        None: sem dados disponíveis para a data (fonte vazia).
+        False: falha ao buscar ou processar os dados.
+    """
+    if not config.parquet_path.exists():
+        logger.error(
+            f"Missing base dataset for {config.dataset_name}: {config.parquet_path}. "
+            "Refusing to recreate from scratch to avoid release history reset."
+        )
+        return False
+
+    try:
+        df_new = config.fetch_function(target_date)
+    except Exception as e:
+        logger.error(f"Failed to fetch {config.dataset_name} for {target_date}: {e}")
+        return False
+
+    if df_new.is_empty():
+        return None
+
+    df = pl.read_parquet(config.parquet_path)
+    cols = [c for c in df.columns if c in df_new.columns]
+    (
+        pl.concat([df, df_new.select(cols)], how="vertical_relaxed")
+        .unique(subset=config.id_cols, keep="last")
+        .sort(config.id_cols)
+        .write_parquet(config.parquet_path)
+    )
+
+    logger.info(f"{config.dataset_name} dataset updated with data from {target_date}")
+    return True
+
+
 def main() -> None:
-    target_date = determine_target_date()
-    logger.info(f"Determined target trade date: {target_date}")
-
-    start_date = yd.du.deslocar(target_date, -4)
-    dates_to_process = [
-        d
-        for d in reversed(yd.du.gerar(start_date, target_date).to_list())
-        if not is_special_holiday(d)
-    ]
-
-    if not dates_to_process:
+    dates = dates_to_update()
+    if not dates:
         logger.info("No trade updates on Christmas Eve or New Year's Eve.")
         return
 
     all_configs = [TPF_CONFIG, FUTURES_CONFIG]
 
     failed = []
-    for date in dates_to_process:
+    for date in dates:
         pending = [c for c in all_configs if not dataset_has_date(c, date)]
         if not pending:
             logger.info(f"All datasets already up to date for {date}.")
             continue
         for config in pending:
-            try:
-                upsert_dataset(date, config)
-            except Exception as e:
-                logger.error(f"Failed to update {config.dataset_name} for {date}: {e}")
+            if upsert_dataset(date, config) is False:
                 failed.append((date, config))
 
     if failed:

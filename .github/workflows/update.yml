@@ -2,9 +2,9 @@ name: Atualização DI e Anbima
 
 on:
   schedule:
-    - cron: "00 01 * * 2-6" # 22:00 BRT (1ª tentativa)
-    - cron: "00 04 * * 2-6" # 01:00 BRT (2ª tentativa)
-    - cron: "00 07 * * 2-6" # 04:00 BRT (3ª tentativa)  
+    - cron: "00 02 * * 2-6" # 23:00 BRT (1ª tentativa)
+    - cron: "00 06 * * 2-6" # 03:00 BRT (2ª tentativa)
+    - cron: "00 10 * * 2-6" # 07:00 BRT (3ª tentativa)  
   workflow_dispatch:
 
 jobs:
