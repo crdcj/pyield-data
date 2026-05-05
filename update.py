@@ -8,7 +8,7 @@ from pathlib import Path
 
 import polars as pl
 import pyield as yd
-from pyield.b3.boletim import boletim_negociacao
+from pyield.b3.boletim import buscar as boletim_buscar
 
 # Artefatos locais do workflow: o job baixa do latest release para
 # `release_staging/`, atualiza em memoria e depois publica novamente no release.
@@ -35,16 +35,16 @@ class DatasetConfig:
 def get_futures_on_date(date: dt.date) -> pl.DataFrame:
     for attempt in range(3):
         try:
-            df = boletim_negociacao(
+            df = boletim_buscar(
                 data=date,
                 prefixo_ticker=FUTURES_TICKERS,
                 comprimento_ticker=6,
                 boletim_completo=True,
             )
-            logger.info(f"B3 boletim_negociacao({date}): shape={df.shape}")
+            logger.info(f"B3 boletim_buscar({date}): shape={df.shape}")
             if df.is_empty():
                 # Tentar sem filtro pra ver se o problema é no filtro ou na fonte
-                df_raw = boletim_negociacao(data=date, boletim_completo=True)
+                df_raw = boletim_buscar(data=date, boletim_completo=True)
                 logger.info(f"B3 sem filtro: shape={df_raw.shape}")
                 raise ValueError(f"No futures data available for {date}")
             return df
