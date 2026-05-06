@@ -1,7 +1,5 @@
 import datetime as dt
 import logging
-import time
-import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,33 +31,23 @@ class DatasetConfig:
 
 
 def get_futures_on_date(date: dt.date) -> pl.DataFrame:
-    for attempt in range(3):
-        try:
-            df = boletim_buscar(
-                data=date,
-                prefixo_ticker=FUTURES_TICKERS,
-                comprimento_ticker=6,
-                boletim_completo=True,
-            )
-            logger.info(f"B3 boletim_buscar({date}): shape={df.shape}")
-            if df.is_empty():
-                # Tentar sem filtro pra ver se o problema é no filtro ou na fonte
-                df_raw = boletim_buscar(data=date, boletim_completo=True)
-                logger.info(f"B3 sem filtro: shape={df_raw.shape}")
-                raise ValueError(f"No futures data available for {date}")
-            return df
-        except zipfile.BadZipFile:
-            if attempt == 2:
-                raise
-            logger.warning(
-                f"B3 BadZipFile on attempt {attempt + 1}, retrying in 30s..."
-            )
-            time.sleep(30)
-    raise RuntimeError("unreachable")
+    df = boletim_buscar(
+        data=date,
+        prefixo_ticker=FUTURES_TICKERS,
+        comprimento_ticker=6,
+        boletim_completo=True,
+    )
+    logger.info(f"B3 boletim_buscar({date}): shape={df.shape}")
+    if df.is_empty():
+        raise ValueError(f"No futures data available for {date}")
+    return df
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
-    return yd.tpf.taxas(data=date, completo=True)
+    df = yd.tpf.taxas(data=date, completo=True)
+    if df.is_empty():
+        raise ValueError(f"No TPF data available for {date}")
+    return df
 
 
 # Configurações dos datasets
