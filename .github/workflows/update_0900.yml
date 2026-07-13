@@ -20,11 +20,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Create virtual environment
-        run: uv venv
-
-      - name: Install dependencies
-        run: uv pip install -r requirements.txt
+      - name: Sync dependencies
+        run: uv sync --frozen --no-dev
 
       - name: Download data from Latest Release
         env:
@@ -34,7 +31,7 @@ jobs:
           gh release download --pattern "*.parquet" --pattern "*.csv" --dir release_staging
 
       - name: Run update script
-        run: uv run python update_0900.py
+        run: uv run --frozen --no-dev python update_0900.py
 
       - name: Publish Release
         env:

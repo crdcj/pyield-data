@@ -20,11 +20,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Create virtual environment
-        run: uv venv
-
-      - name: Install dependencies
-        run: uv pip install -r requirements.txt
+      - name: Sync dependencies
+        run: uv sync --frozen --no-dev
 
       - name: Download data from Latest Release
         env:
@@ -34,4 +31,4 @@ jobs:
           gh release download --pattern "*.parquet" --dir release_staging
 
       - name: Check datasets
-        run: uv run python check.py
+        run: uv run --frozen --no-dev python check.py
