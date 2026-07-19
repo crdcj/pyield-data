@@ -319,25 +319,22 @@ def main():
         df_calendar = get_ipca_calendar()
 
         # Load existing vna data
-        try:
-            df_vna_base = pl.read_csv(VNA_BASE_CSV, try_parse_dates=True)
-            df_vna = pl.read_parquet(VNA_PARQUET).with_columns(
-                pl.col("reference_date").cast(pl.Date)
-            )
-            logger.info(f"Loaded existing data with {len(df_vna)} entries")
+        df_vna_base = pl.read_csv(VNA_BASE_CSV, try_parse_dates=True)
+        df_vna = pl.read_parquet(VNA_PARQUET).with_columns(
+            pl.col("reference_date").cast(pl.Date)
+        )
+        logger.info(f"Loaded existing data with {len(df_vna)} entries")
 
-            # Update inflation dataframe
-            df_vna_updated = update_vna_dataframe(df_vna_base, df_vna, df_calendar)
+        # Update inflation dataframe
+        df_vna_updated = update_vna_dataframe(df_vna_base, df_vna, df_calendar)
 
-            # Save the updated dataframe to parquet
-            df_vna_updated.write_parquet(VNA_PARQUET)
-            logger.info(f"Updated data saved with {len(df_vna_updated)} entries")
-
-        except FileNotFoundError:
-            logger.info("No existing data found")
+        # Save the updated dataframe to parquet
+        df_vna_updated.write_parquet(VNA_PARQUET)
+        logger.info(f"Updated data saved with {len(df_vna_updated)} entries")
 
     except Exception as e:
         logger.error(f"Error in main process: {e}", exc_info=True)
+        raise
 
 
 if __name__ == "__main__":

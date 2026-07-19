@@ -508,7 +508,7 @@ wheels = [
 
 [[package]]
 name = "pyield"
-version = "0.54.0"
+version = "0.54.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastexcel" },
@@ -517,9 +517,9 @@ dependencies = [
     { name = "requests" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/26/64/cd9d0129aa9378b7adadf63d9a915a014478e56601652e44222d3f3f0505/pyield-0.54.0.tar.gz", hash = "sha256:3334a12f5ec56da91f0d02cf77f28a3259b2b6c4d9ad69416398436ef3216ad1", size = 122182, upload-time = "2026-07-12T13:32:15.428Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/af/00117ff7d580289df7fb47f474470937e2d28fed07a1c13a280382286c8c/pyield-0.54.2.tar.gz", hash = "sha256:151d0f59567e00af2e770a0a5d9b7db1ca1b135268a9b646aa5e5b407a71df93", size = 126992, upload-time = "2026-07-16T10:57:28.981Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/64/db7e6201a1907b054154dbe7f67fc2325e00b6808a8c7d3f42b64bd23f6b/pyield-0.54.0-py3-none-any.whl", hash = "sha256:c3aefacacdee4092d5f1c242610a9661affd0fa0335d0e6aa3786787c20d74b9", size = 162764, upload-time = "2026-07-12T13:32:13.732Z" },
+    { url = "https://files.pythonhosted.org/packages/68/8e/ae3dbf05ae03d6f54b545d5c92c740902e8798e2a71bfa1decc3766dec61/pyield-0.54.2-py3-none-any.whl", hash = "sha256:4c4ea3a860dde0556ecc1c67a529aa8f96a2bb08cd9a3bdcb3d92697b3a79d02", size = 171017, upload-time = "2026-07-16T10:57:27.224Z" },
 ]
 
 [[package]]

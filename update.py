@@ -6,6 +6,7 @@ from pathlib import Path
 
 import polars as pl
 import pyield as yd
+from pyield.anbima.taxas import buscar as anbima_taxas_buscar
 from pyield.b3.boletim import buscar as boletim_buscar
 
 # Artefatos locais do workflow: o job baixa do latest release para
@@ -44,7 +45,7 @@ def get_futures_on_date(date: dt.date) -> pl.DataFrame:
 
 
 def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
-    df = yd.tpf.taxas(data=date, completo=True)
+    df = anbima_taxas_buscar(data=date)
     if df.is_empty():
         raise ValueError(f"No TPF data available for {date}")
     return df
