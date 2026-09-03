@@ -10,3 +10,8 @@ Reduce project complexity by default.
 - Keep code paths small, explicit, and easy to debug.
 - Before introducing non-trivial logic, state why it is needed.
 - Favor local fixes over broad refactors unless requested.
+
+## Verification
+- Before concluding any change, run `uv run ruff check .`.
+- Run `uv run ruff format --check .`.
+- Run `uv run ty check`.

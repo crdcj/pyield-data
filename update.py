@@ -132,7 +132,7 @@ def upsert_dataset(target_date: dt.date, config: DatasetConfig) -> bool | None:
 
     try:
         df_new = config.fetch_function(target_date)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — uma fonte não impede testar as demais
         logger.error(f"Failed to fetch {config.dataset_name} for {target_date}: {e}")
         return False
 

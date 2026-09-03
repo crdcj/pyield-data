@@ -1,13 +1,12 @@
 import datetime as dt
 import logging
-from calendar import monthrange
 from decimal import Decimal, getcontext
 from pathlib import Path
-from typing import Optional
 
 import polars as pl
 import pyield as yd
 import requests
+from dateutil.relativedelta import relativedelta
 
 # Set precision (optional)
 getcontext().prec = 28
@@ -58,10 +57,10 @@ def get_ipca_calendar() -> pl.DataFrame:
         for item in calendario_completo["items"]:
             if item["titulo"] == "Índice Nacional de Preços ao Consumidor Amplo":
                 try:
-                    release_date = dt.datetime.strptime(
+                    release_date = dt.date.strptime(
                         item["data_divulgacao"],
                         "%d/%m/%Y %H:%M:%S",
-                    ).date()
+                    )
                     calendario_ipca.append(release_date)
                 except ValueError as e:
                     logger.warning(f"Invalid date format: {e}")
@@ -74,7 +73,7 @@ def get_ipca_calendar() -> pl.DataFrame:
         raise
 
 
-def get_ipca_data(months_back: int = 4) -> Optional[float]:
+def get_ipca_data(months_back: int = 4) -> float | None:
     """
     Get IPCA data for the specified period.
 
@@ -85,15 +84,9 @@ def get_ipca_data(months_back: int = 4) -> Optional[float]:
         float: IPCA value as percentage or None if error occurs
     """
     try:
-        today = dt.date.today()
+        today = yd.hoje()
         end_date = today.strftime("%d-%m-%Y")
-
-        year, month = today.year, today.month - months_back
-        while month <= 0:
-            month += 12
-            year -= 1
-        day = min(today.day, monthrange(year, month)[1])
-        start_date = dt.date(year, month, day).strftime("%d-%m-%Y")
+        start_date = (today - relativedelta(months=months_back)).strftime("%d-%m-%Y")
 
         df_ipca = yd.ipca.indices(start_date, end_date)
 
@@ -105,12 +98,12 @@ def get_ipca_data(months_back: int = 4) -> Optional[float]:
         ipca_value = float(ipca_value) * 100
         return ipca_value
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — falhas da fonte não interrompem o fallback
         logger.error(f"Error fetching IPCA data: {e}")
         return None
 
 
-def get_current_month_release_date(df_calendario: pl.DataFrame) -> Optional[dt.date]:
+def get_current_month_release_date(df_calendario: pl.DataFrame) -> dt.date | None:
     """
     Find the current month's IPCA release date.
 
@@ -120,7 +113,7 @@ def get_current_month_release_date(df_calendario: pl.DataFrame) -> Optional[dt.d
     Returns:
         dt.date: Current month's release date or None if not found
     """
-    today = dt.date.today()
+    today = yd.hoje()
 
     current_month_release = df_calendario.filter(
         pl.col("data_divulgacao").dt.month() == today.month,
@@ -134,24 +127,13 @@ def get_current_month_release_date(df_calendario: pl.DataFrame) -> Optional[dt.d
     return current_month_release["data_divulgacao"][0]
 
 
-def get_previous_15th(date):
-    """
-    Given a date, returns the previous 15th day of a month.
-    If the date is the 15th, returns the 15th of the previous month.
-    """
-    # date = pd.to_datetime(date)  # Ensure date is in datetime format
-
-    # If the date is on or after the 15th of the current month
+def get_latest_15th(date: dt.date) -> dt.date:
+    """Return the most recent 15th, including the given date."""
     if date.day >= 15:
-        # Return the 15th of the current month
-        return dt.datetime(date.year, date.month, 15)
-    else:
-        # We need the 15th of the previous month
-        # If current month is January, go to December of previous year
-        if date.month == 1:
-            return dt.datetime(date.year - 1, 12, 15)
-        else:
-            return dt.datetime(date.year, date.month - 1, 15)
+        return dt.date(date.year, date.month, 15)
+    if date.month == 1:
+        return dt.date(date.year - 1, 12, 15)
+    return dt.date(date.year, date.month - 1, 15)
 
 
 def update_vna_dataframe(
@@ -170,7 +152,7 @@ def update_vna_dataframe(
     Returns:
         pl.DataFrame: Updated vna dataframe
     """
-    today = dt.date.today()
+    today = yd.hoje()
 
     # Get the last date in the dataframe
     last_date_raw = df_vna["reference_date"].max()
@@ -184,7 +166,9 @@ def update_vna_dataframe(
         logger.info(f"Data already up to date until {last_date_in_df}")
         return df_vna
 
-    business_days = yd.du.gerar(last_date_in_df, today, fechamento="right").to_list()
+    business_days = yd.du.gerar(
+        last_date_in_df, today, limites_inclusivos="fim"
+    ).to_list()
 
     if len(business_days) == 0:
         logger.info("No new business days to add")
@@ -238,7 +222,7 @@ def update_vna_dataframe(
             continue
 
         # Update vna. First get the last vna in the last 15th
-        vna_base_date = get_previous_15th(date).date()
+        vna_base_date = get_latest_15th(date)
         vna_base = df_vna_base.filter(pl.col("reference_date") == vna_base_date)["vna"][
             0
         ]
@@ -289,7 +273,7 @@ def update_vna_dataframe(
 
 def is_business_day(date: dt.date) -> bool:
     """Check if the given date is a business day."""
-    return yd.du.deslocar(date, 0) == date
+    return yd.du.eh_dia_util(date)
 
 
 def is_pre_holiday(date: dt.date) -> bool:
@@ -300,7 +284,7 @@ def is_pre_holiday(date: dt.date) -> bool:
 
 
 def main():
-    today = dt.date.today()
+    today = yd.hoje()
 
     # Check if today is a business day
     if not is_business_day(today):
@@ -332,8 +316,8 @@ def main():
         df_vna_updated.write_parquet(VNA_PARQUET)
         logger.info(f"Updated data saved with {len(df_vna_updated)} entries")
 
-    except Exception as e:
-        logger.error(f"Error in main process: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Error in main process")
         raise
 
 
