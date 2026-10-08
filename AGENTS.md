@@ -3,6 +3,12 @@
 ## Mission
 Reduce project complexity by default.
 
+## General principle
+Apply Occam's razor to all code work: among solutions that satisfy the current
+requirements, prefer the one with the fewest assumptions, branches, dependencies,
+and abstractions. Keep complexity that protects correctness or addresses a concrete
+failure mode. Do not simplify at the expense of required behavior.
+
 ## Rules
 - Prefer the simplest change that solves the current problem.
 - Add complexity only when strictly necessary and justified by a concrete failure mode.

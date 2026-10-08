@@ -88,13 +88,13 @@ def get_ipca_data(months_back: int = 4) -> float | None:
         end_date = today.strftime("%d-%m-%Y")
         start_date = (today - relativedelta(months=months_back)).strftime("%d-%m-%Y")
 
-        df_ipca = yd.ipca.indices(start_date, end_date)
+        df_ipca = yd.ipca.indice_serie(start_date, end_date)
 
         if len(df_ipca) < 2:
             logger.warning("Not enough IPCA data points available")
             return None
 
-        ipca_value = (df_ipca["Value"][-1] / df_ipca["Value"][-2]) - 1
+        ipca_value = (df_ipca["indice"][-1] / df_ipca["indice"][-2]) - 1
         ipca_value = float(ipca_value) * 100
         return ipca_value
 
@@ -191,35 +191,14 @@ def update_vna_dataframe(
     new_rows = []
 
     for date in business_days:
-        # Default to None if we couldn't get values
-        inflation_value = None
-
-        # Determine which inflation value to use based on the rules
+        inflation_value = anbima_value
         if (
             current_month_release_date is not None
             and ipca_value is not None
-            and anbima_value is not None
+            and current_month_release_date <= date
+            and date.day < 15
         ):
-            if date.day < 15:  # Before the 15th of the month
-                if date >= current_month_release_date:
-                    # After IPCA release, use IPCA value
-                    inflation_value = ipca_value
-                else:
-                    # Before IPCA release, use ANBIMA value
-                    inflation_value = anbima_value
-            else:  # After the 15th of the month
-                # Use ANBIMA value
-                inflation_value = anbima_value
-        elif anbima_value is not None:
-            # Fallback to ANBIMA if we couldn't determine the rule
-            inflation_value = anbima_value
-        elif ipca_value is not None:
-            # Fallback to IPCA if ANBIMA is not available
             inflation_value = ipca_value
-
-        if inflation_value is None:
-            logger.warning(f"No inflation value available for {date}, skipping")
-            continue
 
         # Update vna. First get the last vna in the last 15th
         vna_base_date = get_latest_15th(date)
@@ -271,23 +250,16 @@ def update_vna_dataframe(
     return updated_df
 
 
-def is_business_day(date: dt.date) -> bool:
-    """Check if the given date is a business day."""
-    return yd.du.eh_dia_util(date)
-
-
 def is_pre_holiday(date: dt.date) -> bool:
-    """Check if the given date is the day before Christmas or New Year's Eve."""
-    pre_xmas = dt.date(date.year, 12, 24)
-    pre_ny = dt.date(date.year, 12, 31)
-    return date == pre_xmas or date == pre_ny
+    """Check for Christmas Eve or New Year's Eve."""
+    return date.month == 12 and date.day in (24, 31)
 
 
 def main():
     today = yd.hoje()
 
     # Check if today is a business day
-    if not is_business_day(today):
+    if not yd.du.eh_dia_util(today):
         logger.warning("Today is not a business day.")
         return
 
