@@ -2,7 +2,9 @@ name: Verificação de Dados
 
 on:
   schedule:
-    - cron: "00 11 * * 2-6" # 08:00 BRT — após as 3 tentativas de atualização
+    # 07:17 BRT, depois das tentativas da madrugada. É o único alarme: fica
+    # vermelho enquanto faltar algum pregão dos últimos 5 dias úteis.
+    - cron: "17 10 * * *"
   workflow_dispatch:
 
 jobs:
@@ -13,22 +15,15 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: "3.14"
-
-      - name: Sync dependencies
-        run: uv sync --frozen --no-dev
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Download data from Latest Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p release_staging
-          gh release download --pattern "*.parquet" --dir release_staging
+        run: gh release download --pattern "*.parquet" --dir release_staging
 
       - name: Check datasets
-        run: uv run --frozen --no-dev python check.py
+        run: uv run --frozen --no-dev check.py

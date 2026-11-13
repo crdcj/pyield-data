@@ -2,9 +2,11 @@ name: Atualização DI e Anbima
 
 on:
   schedule:
-    - cron: "00 02 * * 2-6" # 23:00 BRT (1ª tentativa)
-    - cron: "00 06 * * 2-6" # 03:00 BRT (2ª tentativa)
-    - cron: "00 10 * * 2-6" # 07:00 BRT (3ª tentativa)  
+    # A cada 2 horas (22:17, 00:17, ... BRT), fora do minuto :00, o mais
+    # congestionado do GitHub. O script é idempotente e só busca os pregões que
+    # faltam: as execuções extras absorvem o atraso do agendador e as falhas
+    # das fontes, sem lógica de retentativa.
+    - cron: "17 1-23/2 * * *"
   workflow_dispatch:
 
 jobs:
@@ -12,32 +14,28 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
-      
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: "3.14"
+        uses: actions/checkout@v7
 
-      - name: Sync dependencies
-        run: uv sync --frozen --no-dev
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Download data from Latest Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p release_staging
-          gh release download --pattern "*.parquet" --dir release_staging
+        run: gh release download --pattern "*.parquet" --dir release_staging
 
       - name: Run update script
-        run: uv run --frozen --no-dev python update.py
+        id: update
+        run: |
+          before=$(sha256sum release_staging/*)
+          uv run --frozen --no-dev update.py
+          [ "$before" = "$(sha256sum release_staging/*)" ] || echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Publish Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: steps.update.outputs.changed
         run: |
           TAG="data-$(TZ=America/Sao_Paulo date +%Y-%m-%d)"
           DATE_BR=$(TZ=America/Sao_Paulo date +%d-%m-%Y)
@@ -48,9 +46,8 @@ jobs:
           fi
 
       - name: Delete old releases (keep last 30)
+        if: steps.update.outputs.changed
         continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release list --limit 100 --json tagName --jq '.[].tagName' | \
           tail -n +31 | \

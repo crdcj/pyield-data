@@ -1,178 +1,124 @@
+"""Atualiza os datasets publicados no release do GitHub.
+
+O workflow baixa os parquets do último release para `release_staging/`, este
+script acrescenta os pregões que faltam e o workflow publica tudo de novo.
+"""
+
 import datetime as dt
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import polars as pl
 import pyield as yd
-from pyield.anbima.taxas import buscar as anbima_taxas_buscar
-from pyield.b3.boletim import buscar as boletim_buscar
+from pyield.anbima import taxas as anbima_taxas
 
-# Artefatos locais do workflow: o job baixa do latest release para
-# `release_staging/`, atualiza em memoria e depois publica novamente no release.
-BASE_DIR = Path(__file__).parent
-RELEASE_DATA_DIR = BASE_DIR / "release_staging"
-TPF_PARQUET = RELEASE_DATA_DIR / "anbima_tpf.parquet"
-FUTURES_PARQUET = RELEASE_DATA_DIR / "b3_futures.parquet"
+RELEASE_DIR = Path(__file__).parent / "release_staging"
 FUTURES_TICKERS = ["DI1", "DDI", "FRC", "FRO", "DAP", "DOL", "WDO", "IND", "WIN"]
+# A B3 republica o boletim até ~20h45 BRT (as versões anteriores trazem ajustes
+# preliminares) e a ANBIMA publica até ~19h15. Antes do corte, o dia não é buscado.
+CUTOFF_HOUR = 22
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-@dataclass
-class DatasetConfig:
-    """Configuração para atualização de dataset."""
-
-    parquet_path: Path
-    fetch_function: Callable[[dt.date], pl.DataFrame]
-    id_cols: list[str]
-    dataset_name: str
+class Dataset(NamedTuple):
+    name: str
+    path: Path
+    fetch: Callable[[dt.date], pl.DataFrame]
+    id_cols: list[str]  # a primeira é a coluna de data
 
 
-def get_futures_on_date(date: dt.date) -> pl.DataFrame:
-    df = boletim_buscar(
+def fetch_futures(date: dt.date) -> pl.DataFrame:
+    return yd.b3.boletim.buscar(
         data=date,
         prefixo_ticker=FUTURES_TICKERS,
         comprimento_ticker=6,
         boletim_completo=True,
     )
-    logger.info(f"B3 boletim_buscar({date}): shape={df.shape}")
-    if df.is_empty():
-        raise ValueError(f"No futures data available for {date}")
-    return df
 
 
-def get_tpf_on_date(date: dt.date) -> pl.DataFrame:
-    df = anbima_taxas_buscar(data=date)
-    if df.is_empty():
-        raise ValueError(f"No TPF data available for {date}")
-    return df
+DATASETS = [
+    Dataset(
+        name="TPF",
+        path=RELEASE_DIR / "anbima_tpf.parquet",
+        fetch=anbima_taxas.buscar,
+        id_cols=["data_referencia", "titulo", "data_vencimento"],
+    ),
+    Dataset(
+        name="B3 Futures",
+        path=RELEASE_DIR / "b3_futures.parquet",
+        fetch=fetch_futures,
+        id_cols=["TradDt", "TckrSymb"],
+    ),
+]
 
 
-# Configurações dos datasets
-TPF_CONFIG = DatasetConfig(
-    parquet_path=TPF_PARQUET,
-    fetch_function=get_tpf_on_date,
-    id_cols=["data_referencia", "titulo", "data_vencimento"],
-    dataset_name="TPF",
-)
-
-FUTURES_CONFIG = DatasetConfig(
-    parquet_path=FUTURES_PARQUET,
-    fetch_function=get_futures_on_date,
-    id_cols=["TradDt", "TckrSymb"],
-    dataset_name="B3 Futures",
-)
-
-
-def determine_target_date() -> dt.date:
-    """
-    Determina a data de referência para atualização dos dados.
-
-    Antes das 18h BRT, retorna o dia útil anterior (permite rodar
-    manualmente durante o dia para pegar dados de ontem).
-    A partir das 18h, retorna hoje se dia útil.
-    Em fins de semana/feriados, retorna o último dia útil.
-    """
+def target_date() -> dt.date:
+    """Pregão mais recente cujos dados definitivos já deveriam estar publicados."""
     now = yd.agora()
-    today = now.date()
-
-    if not yd.du.eh_dia_util(today):
-        return yd.du.ultimo_dia_util()
-    if now.hour < 18:
-        return yd.du.deslocar(today, -1)
-    return today
-
-
-def is_special_holiday(date: dt.date) -> bool:
-    """Não tem pregão no dia 24/12 e 31/12."""
-    pre_xmas = dt.date(date.year, 12, 24)
-    pre_ny = dt.date(date.year, 12, 31)
-    return date in (pre_xmas, pre_ny)
+    if now.hour < CUTOFF_HOUR:
+        return yd.b3.pregao_anterior(now.date())
+    return yd.b3.ultimo_pregao(now.date())
 
 
 def dates_to_update() -> list[dt.date]:
-    """Retorna dias úteis a processar, do mais recente ao mais antigo."""
-    last_date = determine_target_date()
-    logger.info(f"Last trade date to update: {last_date}")
+    """Pregões dos últimos 5 dias úteis (retenção pública da ANBIMA).
+
+    Reprocessar a janela recupera sozinho os dias em que a fonte falhou.
+    """
+    last_date = target_date()
     start_date = yd.du.deslocar(last_date, -4)
     return [
-        d
-        for d in reversed(yd.du.gerar(start_date, last_date).to_list())
-        if not is_special_holiday(d)
+        d for d in yd.du.gerar(start_date, last_date).to_list() if yd.b3.eh_pregao(d)
     ]
 
 
-def dataset_has_date(config: DatasetConfig, target_date: dt.date) -> bool:
-    """Checa se o parquet já contém dados para a target_date."""
-    if not config.parquet_path.exists():
-        return False
-    df = pl.read_parquet(config.parquet_path, columns=config.id_cols[:1])
-    date_col = config.id_cols[0]
-    return df.filter(pl.col(date_col) == target_date).height > 0
+def missing_dates(dataset: Dataset, dates: list[dt.date]) -> list[dt.date]:
+    """Datas que ainda não estão no parquet do dataset."""
+    date_col = dataset.id_cols[0]
+    present = set(pl.read_parquet(dataset.path, columns=[date_col])[date_col])
+    return [d for d in dates if d not in present]
 
 
-def upsert_dataset(target_date: dt.date, config: DatasetConfig) -> bool | None:
+def update_dataset(dataset: Dataset, dates: list[dt.date]) -> None:
+    """Acrescenta ao parquet as datas ausentes que a fonte conseguir entregar.
+
+    Fonte fora do ar ou ainda sem dados não derruba o job: o que foi obtido é
+    publicado, a próxima execução agendada tenta de novo e o check.py acusa se
+    a data continuar faltando.
     """
-    Atualiza um dataset parquet com novos dados.
+    df = pl.read_parquet(dataset.path)
+    new_frames = []
+    for date in missing_dates(dataset, dates):
+        try:
+            df_new = dataset.fetch(date)
+        except Exception:
+            logger.exception(f"Failed to fetch {dataset.name} for {date}")
+            continue
+        if df_new.is_empty():
+            logger.warning(f"No {dataset.name} data available for {date}")
+            continue
+        logger.info(f"{dataset.name} {date}: {df_new.height} rows")
+        new_frames.append(df_new.select(df.columns))
 
-    Returns:
-        True: dataset atualizado com sucesso.
-        None: sem dados disponíveis para a data (fonte vazia).
-        False: falha ao buscar ou processar os dados.
-    """
-    if not config.parquet_path.exists():
-        logger.error(
-            f"Missing base dataset for {config.dataset_name}: {config.parquet_path}. "
-            "Refusing to recreate from scratch to avoid release history reset."
+    if new_frames:
+        (
+            pl.concat([df, *new_frames], how="vertical_relaxed")
+            .unique(subset=dataset.id_cols, keep="last")
+            .sort(dataset.id_cols)
+            .write_parquet(dataset.path)
         )
-        return False
-
-    try:
-        df_new = config.fetch_function(target_date)
-    except Exception as e:  # noqa: BLE001 — uma fonte não impede testar as demais
-        logger.error(f"Failed to fetch {config.dataset_name} for {target_date}: {e}")
-        return False
-
-    if df_new.is_empty():
-        return None
-
-    df = pl.read_parquet(config.parquet_path)
-    cols = [c for c in df.columns if c in df_new.columns]
-    (
-        pl.concat([df, df_new.select(cols)], how="vertical_relaxed")
-        .unique(subset=config.id_cols, keep="last")
-        .sort(config.id_cols)
-        .write_parquet(config.parquet_path)
-    )
-
-    logger.info(f"{config.dataset_name} dataset updated with data from {target_date}")
-    return True
 
 
 def main() -> None:
     dates = dates_to_update()
-    if not dates:
-        logger.info("No trade updates on Christmas Eve or New Year's Eve.")
-        return
+    logger.info(f"Trade dates to check: {dates[0]} to {dates[-1]}")
 
-    all_configs = [TPF_CONFIG, FUTURES_CONFIG]
-
-    failed = []
-    for date in dates:
-        pending = [c for c in all_configs if not dataset_has_date(c, date)]
-        if not pending:
-            logger.info(f"All datasets already up to date for {date}.")
-            continue
-        for config in pending:
-            if upsert_dataset(date, config) is False:
-                failed.append((date, config))
-
-    if failed:
-        names = ", ".join(f"{c.dataset_name}@{d}" for d, c in failed)
-        raise RuntimeError(f"Failed to update: {names}")
+    for dataset in DATASETS:
+        update_dataset(dataset, dates)
 
 
 if __name__ == "__main__":
